@@ -1,0 +1,4 @@
+(/home/users/sdi2200048/ergasies/SysPro/hw2-alexandrazrmp/source_dir, /home/users/sdi2200048/ergasies/SysPro/hw2-alexandrazrmp/target_dir)
+(/home/users/sdi2200048/ergasies/SysPro/source_dir, /home/users/sdi2200048/ergasies/SysPro/target_dir)
+(/home/users/sdi2200048/ergasies/SysPro/a, /home/users/sdi2200048/ergasies/SysPro/b)
+(/home/users/sdi2200048/ergasies/SysPro/c, /home/users/sdi2200048/ergasies/SysPro/d)

@@ -1,0 +1,3 @@
+[2025-05-23 13:07:35] Command shutdown
+[2025-05-23 13:10:21] Command sync /home/users/sdi2200048/ergasies/SysPro/c
+[2025-05-23 13:10:53] Command shutdown
