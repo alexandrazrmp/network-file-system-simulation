@@ -110,18 +110,18 @@ int main(int argc, char* argv[]) {
 
     char* log_file_ = NULL;
     char* config_file_ = NULL;
-    char *port_number = NULL;
+    int port = 0;
     int bufferSize = 0; //number of slots (must be >0)
     worker_limit = DEFAULT_WORKER_LIMIT;
 
     // Parse arguments
     int option;
-    while ((option = getopt(argc, argv, "l:c:n:")) != -1) {
+    while ((option = getopt(argc, argv, "l:c:n:p:b:")) != -1) {
         switch (option) {
             case 'l': log_file_ = optarg; break;
             case 'c': config_file_ = optarg; break;
             case 'n': if (atoi(optarg)>0) worker_limit = atoi(optarg); break;
-            case 'p': port_number = optarg; break;
+            case 'p':   port = atoi(optarg); break;
             case 'b':   bufferSize = atoi(optarg);
                         if (bufferSize <=0) {
                             fprintf(stderr, "Buffer size must be > 0\n");
@@ -134,7 +134,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    if (!log_file_ || !config_file_ || !port_number) {
+    if (!log_file_ || !config_file_ || !port) {
         fprintf(stderr, "Missing arguments.\n");
         return 1;
     }
@@ -159,12 +159,6 @@ int main(int argc, char* argv[]) {
     int opt = 1;
     int addrlen = sizeof(address);
 
-    if (!port_number) {
-        fprintf(stderr, "Missing -p <port_number>\n");
-        exit(1);
-    }
-
-    int port = atoi(port_number);
     if (port <= 1024 || port > 65535) {
         fprintf(stderr, "Invalid port number: %d. Use a port > 1024.\n", port);
         exit(1);
@@ -184,13 +178,13 @@ int main(int argc, char* argv[]) {
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(port);
-
+printf("5\n");
     //bind
     if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
         perror("bind failed");
         exit(1);
     }
-
+printf("6\n");
     //listen
     if (listen(server_fd, 3) < 0) {
         perror("listen");

@@ -34,7 +34,7 @@ int main(int argc, char *argv[]) {
 
         // Parse arguments
     int option;
-    while ((option = getopt(argc, argv, "l:c:n:")) != -1) {
+    while ((option = getopt(argc, argv, "l:h:p:")) != -1) {
         switch (option) {
             case 'l': log_file_ = optarg; break;
             case 'h': host_ip_ = optarg; break;
