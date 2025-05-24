@@ -13,43 +13,86 @@
 #include <signal.h>
 #include <bits/getopt_core.h>
 #include <time.h>
+#include <pthread.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #define MAX_LINE 1024
 
 int main(int argc, char *argv[]) {
 
-    if (argc != 3 || strcmp(argv[1], "-l") != 0) {
-        fprintf(stderr, "Please give input in the form ./fss_console -l <console-logfile>");
+    if (argc != 7) {
+        fprintf(stderr, "Please give input in the form ./nfs_console -l <console-logfile> -h <host_IP> -p <host_port>");
         return 1;
     }
 
-    char *logfile = argv[2];
-    FILE *log_file = fopen(logfile, "a");
+    char* log_file_ = NULL;
+    char* host_ip_ = NULL;
+    char *host_port_ = NULL;
+
+
+        // Parse arguments
+    int option;
+    while ((option = getopt(argc, argv, "l:c:n:")) != -1) {
+        switch (option) {
+            case 'l': log_file_ = optarg; break;
+            case 'h': host_ip_ = optarg; break;
+            case 'p': host_port_ = optarg; break;
+
+            default:
+                fprintf(stderr, "Please give input in the form ./nfs_console -l <console-logfile> -h <host_IP> -p <host_port>\n");
+                exit(1);
+        }
+    }
+
+    if (!log_file_ || !host_ip_ || !host_port_) {
+        fprintf(stderr, "Missing arguments.\n");
+        return 1;
+    }
+
+
+    FILE *log_file = fopen(log_file_, "a");
     if (log_file == NULL) {
         perror("Failed to open log file");
         return 1;
     }
 
-    printf("Opening fss_in for writing...\n");
-    int fd_in = open("fss_in", O_WRONLY);
-    printf("fss_in opened!\n");
-    
-    if (fd_in < 0) {
-        perror("failed to open fss_in");
+
+    //create and connect socket
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) {
+        perror("socket");
         fclose(log_file);
-        exit(1);
+        return 1;
     }
 
-    int fd_out = open("fss_out", O_RDONLY);
-    if (fd_out < 0) {
-        perror("failed to open fss_out");
+    struct sockaddr_in serv_addr = {0};
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(atoi(host_port_));
+    if (inet_pton(AF_INET, host_ip_, &serv_addr.sin_addr) <= 0) {
+        fprintf(stderr, "Invalid host IP: %s\n", host_ip_);
+        close(sockfd);
         fclose(log_file);
-        close(fd_in);
-        exit(1);
+        return 1;
+    }
+
+    if (connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
+        perror("connection failed");
+        close(sockfd);
+        fclose(log_file);
+        return 1;
     }
 
     char input[MAX_LINE];
     char response[MAX_LINE];
+    FILE *sockf = fdopen(sockfd, "r+"); //read-write
+    if (!sockf) {
+        perror("fdopen");
+        close(sockfd);
+        fclose(log_file);
+        return 1;
+    }
 
     int break_flag = 0; //flag to break the loop
 
@@ -61,7 +104,7 @@ int main(int argc, char *argv[]) {
             break;
         }
 
-        //keep a copy of input so that it can be passed on through the pipe 
+        //keep a copy of input so that it can be passed on through the socket
         char copy[MAX_LINE];
         strcpy(copy, input);
 
@@ -72,6 +115,7 @@ int main(int argc, char *argv[]) {
         instruction = strtok(input, " ");
         arg1 = strtok(NULL, " ");
         arg2 = strtok(NULL, " ");
+
         if (strcmp(instruction, "shutdown") == 0) {
             if (arg1 != NULL) {
                 fprintf(stderr, "CONSOLE received invalid shutdown instruction\n");
@@ -86,21 +130,6 @@ int main(int argc, char *argv[]) {
             fprintf(log_file, "%s Command shutdown\n", timebuf);   //write to log file
 
             break_flag = 1; //set the flag to break the loop
-        } else if (strcmp(instruction, "sync") == 0) {
-            if (arg1 == NULL || arg2 != NULL) {
-                fprintf(stderr, "CONSOLE received invalid instruction\n");
-                continue;
-            }
-            //write to log file
-            time_t now = time(NULL);
-            struct tm *t = localtime(&now);
-            char timebuf[64];
-            strftime(timebuf, sizeof(timebuf), "[%Y-%m-%d %H:%M:%S]", t);   //get the corerct time and format
-                    
-            fprintf(log_file, "%s Command sync %s\n", timebuf, arg1);   //write to log file
-                    
-            fflush(log_file); // flush to ensure it's written immediately
-            //use pipe to send sync instruction
         } else if (strcmp(instruction, "cancel") == 0) {
             if (arg1 == NULL || arg2 != NULL) {
                 fprintf(stderr, "INVALID INSTRUCTION\n");
@@ -113,21 +142,6 @@ int main(int argc, char *argv[]) {
             strftime(timebuf, sizeof(timebuf), "[%Y-%m-%d %H:%M:%S]", t);   //get the corerct time and format
                     
             fprintf(log_file, "%s Command cancel", timebuf);   //write to log file
-            fprintf(log_file, " %s\n", arg1);
-                    
-            fflush(log_file); // flush to ensure it's written immediately
-        } else if (strcmp(instruction, "status") == 0) {
-            if (arg1 == NULL || arg2 != NULL) {
-                fprintf(stderr, "CONSOLE received invalid instruction\n");
-                continue;
-            }
-            //write to log file
-            time_t now = time(NULL);
-            struct tm *t = localtime(&now);
-            char timebuf[64];
-            strftime(timebuf, sizeof(timebuf), "[%Y-%m-%d %H:%M:%S]", t);   //get the corerct time and format
-                    
-            fprintf(log_file, "%s Command status", timebuf);   //write to log file
             fprintf(log_file, " %s\n", arg1);
                     
             fflush(log_file); // flush to ensure it's written immediately
@@ -151,21 +165,23 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
-        //write to pipe
-        if (write(fd_in, copy, strlen(copy)) < 0) {
-            perror("CONSOLE failed to write to fss_in");
-            break;
-        }
+        //write to the socket
+        dprintf(sockfd, "%s\n", copy);
 
         //wait and read response from manager
-        ssize_t n = read(fd_out, response, sizeof(response) - 1);
-        if (n<=0) break;    //response must be "all good" therefore not empty
-        if (break_flag) break;
+        FILE *sockf = fdopen(sockfd, "r");
+        if (fgets(response, sizeof(response), sockf)) {
+            printf("%s", response);
+        }
+
+        if (break_flag) {
+            close(sockfd); //close the socket
+            fclose(log_file); //close the log file
+            break; //break the loop
+        }
+
+
     }
-
-    close(fd_in);
-    close(fd_out);
-
 
 
     return(0);

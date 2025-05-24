@@ -14,8 +14,11 @@
 #include <errno.h>
 #include <signal.h>
 #include <time.h>
-#include <sys/inotify.h>
 #include <sys/select.h>
+#include <pthread.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #include "List.h"
 #include "Queue.h"
@@ -24,10 +27,6 @@
 
 #define MAX_LINE 1024
 
-
-void setup_inotify();
-
-int add_directory_watch(const char *path) ;
 
 void sigchld_handler(int sig) ;
 

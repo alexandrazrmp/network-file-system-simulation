@@ -14,7 +14,7 @@
 #include <bits/getopt_core.h>
 #include <time.h>
 #include <dirent.h>
-
+#include <pthread.h>
 
 
 #define MAX_LINE 1024
@@ -137,7 +137,7 @@ void op_all(const char* src, const char* tgt,  const char* op) {
 
 
 
-int main(int argc, char* argv[]) {  //assuming the worker is called by fss_manager (correctly)
+int main(int argc, char* argv[]) {  //assuming the worker is called by nfs_manager (correctly)
     char* src = argv[1];
     char* tgt = argv[2];
     char* filename = argv[3];
@@ -166,7 +166,7 @@ int main(int argc, char* argv[]) {  //assuming the worker is called by fss_manag
         }
     }
 
-    //print to stdout that will go to the fss_manager
+    //print to stdout that will go to the nfs_manager
     printf("EXEC_REPORT_START\n");
 
     if (errors == 0) printf("STATUS: SUCCESS\n");

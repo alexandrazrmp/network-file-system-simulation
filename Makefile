@@ -4,25 +4,28 @@
 # Type  make        to compile all the programs
 # Type  make clean  to remove the executables
 
+
+#gcc <filename>.c -lpthread
+
 CC = gcc
 CFLAGS = -Wall -g
-TARGETS = fss_manager fss_console worker
+TARGETS = nfs_manager nfs_console worker
 
-TRG_MANAGER = fss_manager.o List.o Queue.o
+TRG_MANAGER = nfs_manager.o List.o Queue.o
 
 all: $(TARGETS)
 
-fss_manager: $(TRG_MANAGER)
-	$(CC) $(CFLAGS) -o fss_manager $(TRG_MANAGER)
+nfs_manager: $(TRG_MANAGER)
+	$(CC) $(CFLAGS) -o nfs_manager $(TRG_MANAGER)
 
-fss_console: fss_console.c
-	$(CC) $(CFLAGS) -o fss_console fss_console.c
+nfs_console: nfs_console.c
+	$(CC) $(CFLAGS) -o nfs_console nfs_console.c
 
 worker: worker.c
 	$(CC) $(CFLAGS) -o worker worker.c
 
-fss_manager.o: fss_manager.c List.h Queue.h
-	$(CC) $(CFLAGS) -c fss_manager.c
+nfs_manager.o: nfs_manager.c List.h Queue.h
+	$(CC) $(CFLAGS) -c nfs_manager.c
 
 List.o: List.c List.h
 	$(CC) $(CFLAGS) -c List.c
@@ -31,4 +34,4 @@ Queue.o: Queue.c Queue.h
 	$(CC) $(CFLAGS) -c Queue.c
 
 clean:
-	rm -f fss_manager fss_console worker *.o fss_in fss_out manager_logfile.txt console_logfile.txt
+	rm -f nfs_manager nfs_console worker *.o nfs_in nfs_out manager_logfile.txt console_logfile.txt
