@@ -36,7 +36,6 @@ void parse_config_file(FILE* file, FILE* log_file) {
             
             sync_list = add_sync_entry(&sync_list, src, tgt);   //add at the end
             sync_info_mem_store* current = exists_sync_entry(sync_list, src, tgt);  //get the ptr to the new entry
-            // current->wd = add_directory_watch(current->source_dir); //monitor source directory
 
             //print to log file
             fprintf(log_file, "%s Added directory: %s -> %s\n", timebuf, src, tgt);
@@ -54,52 +53,19 @@ void parse_config_file(FILE* file, FILE* log_file) {
     fclose(file);
 }
 
-void start_worker(const char* src, const char* tgt, const char* filename, const char* operation) {
-    //create read-write named pipe for each worker
-    int pipefd[2];
-    if (pipe(pipefd) == -1) {
-        perror("pipe creation failed");
-        return;
-    }
+void start_worker(const char* src, const char* tgt, const char* filename, const char* operation, FILE* log_file) {
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    char timebuf[64];
+    strftime(timebuf, sizeof(timebuf), "[%Y-%m-%d %H:%M:%S]", t);
 
-    sync_info_mem_store* cur = exists_sync_entry(sync_list, src, tgt);
+    fprintf(log_file, "%s Added file:  %s -> %s\n", timebuf, src, tgt);
+    fflush(log_file);
 
-    pid_t pid = fork();
-    if (pid == 0) { // child process
+    //create worker thread
 
-        close(pipefd[0]); // close read end of the pipe
-        dup2(pipefd[1], STDOUT_FILENO); // redirect stdout to the write end of the pipe
-        close(pipefd[1]); // close write end of the pipe
 
-        char* const args[] = {"./worker", (char *)src, (char *)tgt, (char *)filename, (char *)operation, NULL};
-        execv(args[0], args);
 
-        perror("execv failed");
-        exit(1);
-
-    } else if (pid < 0) {
-        perror("fork failed");
-        close(pipefd[0]);
-        close(pipefd[1]);
-    } else { // parent process
-        worker_array[worker_count++] = pid; //add to worker array
-        if (cur) cur->worker_pid = pid; //latest worker pid
-        close(pipefd[1]);
-
-        //read from the pipe
-        char buffer[MAX_LINE];
-        ssize_t bytes_read = read(pipefd[0], buffer, sizeof(buffer) - 1);
-        if (bytes_read > 0) {
-            buffer[bytes_read] = '\0'; // null-terminate the string
-            printf("%s", buffer); // print the report as is
-        } else if (bytes_read == 0) {
-            printf("No bytes in the pipe\n");
-        } else {
-            perror("read failed");
-        }
-        close(pipefd[0]); // close read
-
-    }
 
     return;
 }
@@ -160,7 +126,7 @@ int main(int argc, char* argv[]) {
     int addrlen = sizeof(address);
 
     if (port <= 1024 || port > 65535) {
-        fprintf(stderr, "Invalid port number: %d. Use a port > 1024.\n", port);
+        fprintf(stderr, "invalid port number");
         exit(1);
     }
 
@@ -178,13 +144,13 @@ int main(int argc, char* argv[]) {
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(port);
-printf("5\n");
+
     //bind
     if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
         perror("bind failed");
         exit(1);
     }
-printf("6\n");
+
     //listen
     if (listen(server_fd, 3) < 0) {
         perror("listen");
@@ -195,28 +161,34 @@ printf("6\n");
     fflush(stdout);
 
     //read config file and add entries to sync_list
-    //parse_config_file(config_file, log_file);
+    parse_config_file(config_file, log_file);
 
 
 
     //do the initial sync
-    // sync_info_mem_store* current = sync_list;
-    // for (int i = 0; i < worker_limit; i++) {
-    //     if (current == NULL) break;         //no more entries
-    //     current->active = 1; //mark as active
-    //     current->last_sync_time = time(NULL); //update last sync time
-    //     current->error_count = 0; //reset error count
-    //     start_worker(current->source_dir, current->target_dir, "ALL", "FULL"); //start worker process
-    //     current = current->next; // move to the next entry
-    // }
+    sync_info_mem_store* current = sync_list;
+    int active_workers = 0;
 
-    // worker_queue = queue_create();
+    while (current != NULL && active_workers < worker_limit) {
+        current->active = 1;
+        current->last_sync_time = time(NULL);
+        current->error_count = 0;
+        start_worker(current->source_dir, current->target_dir, "ALL", "FULL", log_file);
+
+        active_workers++;
+        current = current->next;
+    }
+
+
+    worker_queue = queue_create();
 
     //if there are more entries, add them to the queue
-    // while (current != NULL) {
-    //     worker_queue = queue_push(worker_queue, current->source_dir, current->target_dir, "ALL", "FULL"); //add to queue
-    //     current = current->next; // move to the next entry  
-    // }
+
+    while (current != NULL) {
+        worker_queue = queue_push(worker_queue, current->source_dir, current->target_dir, "ALL", "FULL");
+        current = current->next;
+    }
+
 
 
     //accept nfs_console connection
@@ -268,9 +240,30 @@ printf("6\n");
             break;
     
         } else if (strcmp(instruction, "cancel") == 0) {
-            printf("MANAGER: %s Canceling operation for %s\n", timebuf, arg1);
+            printf("%s Canceling operation for %s\n", timebuf, arg1);
         } else if (strcmp(instruction, "add") == 0) {
-            printf("MANAGER: %s Adding directory: %s -> %s\n", timebuf, arg1, arg2);
+            if (worker_count < worker_limit) {
+                //check if the source directory exists
+                struct stat st;
+                if (stat(arg1, &st) != 0 || !S_ISDIR(st.st_mode) || stat(arg2, &st) != 0 || !S_ISDIR(st.st_mode)) {
+                    printf("Source and target directories must exist and be directories.\n");
+                    fflush(stdout);
+
+                } else {
+
+                    //add to sync_list and start worker
+                    sync_list = add_sync_entry(&sync_list, arg1, arg2);
+                    sync_info_mem_store* current = exists_sync_entry(sync_list, arg1, arg2);  //get the ptr to the new entry
+                    current->active = 1;
+                    current->last_sync_time = time(NULL);
+                    current->error_count = 0;
+                    //write to log file in worker initialization
+                    start_worker(arg1, arg2, "ALL", "FULL", log_file);
+                    worker_count++;
+                    printf("%s Adding directory: %s -> %s\n", timebuf, arg1, arg2);
+                }
+            }
+
         }
     
     

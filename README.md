@@ -1,3 +1,6 @@
+FIX ALL FULL (OPERATION FILENAME IF NOT NEEDED)
+
+
 Compilation Instructions:
 
 compile all using make

@@ -9,9 +9,9 @@
 
 CC = gcc
 CFLAGS = -Wall -g
-TARGETS = nfs_manager nfs_console worker
+TARGETS = nfs_manager nfs_console worker nfs_client
 
-TRG_MANAGER = nfs_manager.o List.o Queue.o
+TRG_MANAGER = nfs_manager.o List.o Queue.o 
 
 all: $(TARGETS)
 
@@ -20,6 +20,9 @@ nfs_manager: $(TRG_MANAGER)
 
 nfs_console: nfs_console.c
 	$(CC) $(CFLAGS) -o nfs_console nfs_console.c
+
+nfs_client: nfs_client.c
+	$(CC) $(CFLAGS) -o nfs_client nfs_client.c
 
 worker: worker.c
 	$(CC) $(CFLAGS) -o worker worker.c

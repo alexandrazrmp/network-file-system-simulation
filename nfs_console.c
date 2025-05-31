@@ -32,7 +32,7 @@ int main(int argc, char *argv[]) {
     char *host_port_ = NULL;
 
 
-        // Parse arguments
+    // Parse arguments
     int option;
     while ((option = getopt(argc, argv, "l:h:p:")) != -1) {
         switch (option) {
@@ -54,24 +54,30 @@ int main(int argc, char *argv[]) {
 
     FILE *log_file = fopen(log_file_, "a");
     if (log_file == NULL) {
-        perror("Failed to open log file");
+        perror("failed to open log file");
         return 1;
     }
 
+    int host_port = atoi(host_port_);
+    if (host_port <= 0 || host_port > 65535) {
+        fprintf(stderr, "invalid port number: %d\n", host_port);
+        fclose(log_file);
+        return 1;
+    }
 
     //create and connect socket
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) {
-        perror("socket");
+        perror("socket creation failed");
         fclose(log_file);
         return 1;
     }
 
     struct sockaddr_in serv_addr = {0};
     serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(atoi(host_port_));
+    serv_addr.sin_port = htons(host_port);
     if (inet_pton(AF_INET, host_ip_, &serv_addr.sin_addr) <= 0) {
-        fprintf(stderr, "Invalid host IP: %s\n", host_ip_);
+        fprintf(stderr, "invalid host IP: %s\n", host_ip_);
         close(sockfd);
         fclose(log_file);
         return 1;
@@ -88,7 +94,7 @@ int main(int argc, char *argv[]) {
     char response[MAX_LINE];
     FILE *sockf = fdopen(sockfd, "r+"); //read-write
     if (!sockf) {
-        perror("fdopen");
+        perror("fdopen failed");
         close(sockfd);
         fclose(log_file);
         return 1;
@@ -157,7 +163,7 @@ int main(int argc, char *argv[]) {
             strftime(timebuf, sizeof(timebuf), "[%Y-%m-%d %H:%M:%S]", t);   //get the corerct time and format
                     
             fprintf(log_file, "%s Command add", timebuf);   //write to log file
-            fprintf(log_file, " %s %s\n", arg1, arg2);
+            fprintf(log_file, " %s -> %s\n", arg1, arg2);
             fflush(log_file); // flush to ensure it's written immediately
 
         } else {
