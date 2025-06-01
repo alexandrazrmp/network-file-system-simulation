@@ -30,9 +30,11 @@ void parse_config_file(FILE* file, FILE* log_file) {
         char timebuf[64];
         strftime(timebuf, sizeof(timebuf), "[%Y-%m-%d %H:%M:%S]", t);   //get the corerct time and format
 
+        line[strcspn(line, "\n")] = 0; //remove newline if present
+
         char src[PATH_MAX] = {0}, tgt[PATH_MAX] = {0};
     
-        if (sscanf(line, " ( %[^,] , %[^)] ) ", src, tgt) == 2) { //successfully parsed
+        if (sscanf(line, "%s %s", src, tgt) == 2) { //successfully parsed
             
             sync_list = add_sync_entry(&sync_list, src, tgt);   //add at the end
             sync_info_mem_store* current = exists_sync_entry(sync_list, src, tgt);  //get the ptr to the new entry
@@ -47,6 +49,10 @@ void parse_config_file(FILE* file, FILE* log_file) {
             printf("%s Monitoring started for %s\n", timebuf, src);
             fflush(stdout);
 
+        }
+        else {
+            fprintf(stderr, "invalid entry in config file\n");
+            continue; //ignore 
         }
     }
     
@@ -136,6 +142,7 @@ int main(int argc, char* argv[]) {
         exit(1);
     }
 
+    //to reuse the address and port immiediately
     if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
         perror("setsockopt");
         exit(1);
