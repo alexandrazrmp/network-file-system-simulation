@@ -3,6 +3,7 @@
 int *worker_array; //will be initialized later when worker limit is set
 int worker_count = 0; //number of workers currently running
 int worker_limit = 0; //maximum number of workers allowed
+pthread_t* worker_thread_pool; //thread pool for worker threads
 
 sync_info_mem_store* sync_list = NULL;
 
@@ -144,7 +145,7 @@ int main(int argc, char* argv[]) {
 
     //to reuse the address and port immiediately
     if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
-        perror("setsockopt");
+        perror("setsockopt failed");
         exit(1);
     }
 
@@ -170,6 +171,71 @@ int main(int argc, char* argv[]) {
     //read config file and add entries to sync_list
     parse_config_file(config_file, log_file);
 
+    //initialize thread pool
+    worker_thread_pool = malloc(sizeof(pthread_t) * worker_limit);
+
+    for (int i = 0; i < worker_limit; i++) {
+        // if (pthread_create(&worker_thread_pool[i], NULL, worker_thread_function, NULL) != 0) {
+        //     perror("pthread_create failed");
+        //     exit(1);
+        // }
+    }
+
+//test
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+    int host_port = 50000;
+    char *host_ip_ = "127.0.0.1";
+    if (host_port <= 0 || host_port > 65535) {
+        fprintf(stderr, "invalid port number: %d\n", host_port);
+        fclose(log_file);
+        return 1;
+    }
+
+    //create and connect socket
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) {
+        perror("socket creation failed");
+        fclose(log_file);
+        return 1;
+    }
+
+    struct sockaddr_in serv_addr = {0};
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(host_port);
+    if (inet_pton(AF_INET, host_ip_, &serv_addr.sin_addr) <= 0) {
+        fprintf(stderr, "invalid host IP: %s\n", host_ip_);
+        close(sockfd);
+        fclose(log_file);
+        return 1;
+    }
+
+    if (connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
+        perror("connection failed");
+        close(sockfd);
+        fclose(log_file);
+        return 1;
+    }
+
+    char input[MAX_LINE];
+    char response[MAX_LINE];
+    FILE *sockf = fdopen(sockfd, "r+"); //read-write
+    if (!sockf) {
+        perror("fdopen failed");
+        close(sockfd);
+        fclose(log_file);
+        return 1;
+    }
+
+    //send initial command to the client
+    strcpy(input, "LIST");
+    write(sockfd, input, strlen(input));
+    fflush(sockf);
+    read(sockfd, input, sizeof(input)-1);
+    printf("%s\n", input);
+
+    //close the socket
+    close(sockfd);
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
     //do the initial sync
@@ -180,12 +246,13 @@ int main(int argc, char* argv[]) {
         current->active = 1;
         current->last_sync_time = time(NULL);
         current->error_count = 0;
+
+        //start worker thread for each entry in sync_list and also write to log file
         start_worker(current->source_dir, current->target_dir, "ALL", "FULL", log_file);
 
         active_workers++;
         current = current->next;
     }
-
 
     worker_queue = queue_create();
 
@@ -197,7 +264,6 @@ int main(int argc, char* argv[]) {
     }
 
 
-
     //accept nfs_console connection
     int client_fd = accept(server_fd, NULL, NULL);
     if (client_fd < 0) {
@@ -206,8 +272,6 @@ int main(int argc, char* argv[]) {
     }
     printf("Console-Manager connection achieved\n");
 
-    char input[MAX_LINE];
-    char response[MAX_LINE];
 
 
     while (1) {              //get console input and handle it
@@ -247,7 +311,28 @@ int main(int argc, char* argv[]) {
             break;
     
         } else if (strcmp(instruction, "cancel") == 0) {
+            //check if the source directory exists and is a directory
+            struct stat st;
+            if (stat(arg1, &st) != 0 || !S_ISDIR(st.st_mode)) {
+                printf("Source directory must exist and be a directory.\n");
+                fflush(stdout);
+                continue;   //ignore
+            }
+
             printf("%s Canceling operation for %s\n", timebuf, arg1);
+
+            //find the entry in sync_list and set active to 0
+            sync_info_mem_store* entry = exists_sync_entry(sync_list, arg1, NULL);
+            if (entry != NULL) {
+                entry->active = 0; //set active to 0
+                entry->last_sync_time = time(NULL); //update last sync time
+                entry->error_count = 0; //reset error count
+                printf("%s Operation for %s canceled.\n", timebuf, arg1);
+            } else {
+                printf("%s No active operation found for %s.\n", timebuf, arg1);
+            }
+
+
         } else if (strcmp(instruction, "add") == 0) {
             if (worker_count < worker_limit) {
                 //check if the source directory exists
@@ -255,9 +340,15 @@ int main(int argc, char* argv[]) {
                 if (stat(arg1, &st) != 0 || !S_ISDIR(st.st_mode) || stat(arg2, &st) != 0 || !S_ISDIR(st.st_mode)) {
                     printf("Source and target directories must exist and be directories.\n");
                     fflush(stdout);
+                    continue; //ignore
+                }
 
-                } else {
+                if (exists_in_queue(worker_queue, arg1)) {
+                    printf("%s Already in queue: %s\n", timebuf, arg1);
+                    write(client_fd, "Already in queue\n", strlen("Already in queue\n"));
 
+                }
+                else {
                     //add to sync_list and start worker
                     sync_list = add_sync_entry(&sync_list, arg1, arg2);
                     sync_info_mem_store* current = exists_sync_entry(sync_list, arg1, arg2);  //get the ptr to the new entry
@@ -267,7 +358,10 @@ int main(int argc, char* argv[]) {
                     //write to log file in worker initialization
                     start_worker(arg1, arg2, "ALL", "FULL", log_file);
                     worker_count++;
-                    printf("%s Adding directory: %s -> %s\n", timebuf, arg1, arg2);
+                    printf("%s Added file: %s -> %s\n", timebuf, arg1, arg2);
+                    char write_buf[1024];
+                    int len = snprintf(write_buf, sizeof(write_buf), "%s Added file: %s -> %s\n", timebuf, arg1, arg2);
+                    write(client_fd, write_buf, len); // len is string length
                 }
             }
 

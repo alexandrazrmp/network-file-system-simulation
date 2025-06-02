@@ -52,6 +52,14 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
+    int one = 1;
+
+    //to reuse the address and port immiediately
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &one, sizeof(one))) {
+        perror("setsockopt failed");
+        exit(1);
+    }
+
     //bind the socket to the specified port
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
@@ -113,6 +121,8 @@ int main(int argc, char *argv[]) {
                     fflush(client_fp);
                     continue;
                 }
+                write(client_fd, "LIST recieved", strlen("LIST recieved"));
+                fflush(client_fp);
                 // list(src_dir, client_fp);
 
             } else if (strcmp(cmd, "PULL") == 0) {

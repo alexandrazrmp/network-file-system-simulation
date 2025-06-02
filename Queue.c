@@ -35,3 +35,14 @@ WorkerQueue* queue_pop(WorkerQueue **worker_queue) {
     cur->next = NULL;
     return last;
 }
+
+int exists_in_queue(WorkerQueue *worker_queue, const char* src) {
+    WorkerQueue *cur = worker_queue;
+    while (cur != NULL) {
+        if (strcmp(cur->source_dir, src) == 0) {
+            return 1;
+        }
+        cur = cur->next;
+    }
+    return 0;
+}
