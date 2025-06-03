@@ -58,16 +58,6 @@ void parse_config_file(FILE* file, FILE* log_file) {
                 continue; //ignore
             }
 
-            //print to log file
-            fprintf(log_file, "%s Added directory: %s -> %s\n", timebuf, src, tgt);
-            fprintf(log_file, "%s Monitoring started for %s\n", timebuf, src);
-            fflush(log_file);
-            
-            //print to standard output
-            printf("%s Added directory: %s -> %s\n", timebuf, src, tgt);
-            printf("%s Monitoring started for %s\n", timebuf, src);
-            fflush(stdout);
-
         }
         else {
             fprintf(stderr, "invalid entry in config file\n");
@@ -120,14 +110,14 @@ void start_worker(sync_info_mem_store* entry, FILE* log_file) {
 
     if (host_port <= 0 || host_port > 65535) {
         fprintf(stderr, "invalid port number: %d\n", host_port);
-        return 1;
+        return;
     }
 
     //create and connect socket
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) {
         perror("socket creation failed");
-        return 1;
+        return;
     }
 
     struct sockaddr_in serv_addr = {0};
@@ -136,22 +126,21 @@ void start_worker(sync_info_mem_store* entry, FILE* log_file) {
     if (inet_pton(AF_INET, host_ip_, &serv_addr.sin_addr) <= 0) {
         fprintf(stderr, "invalid host IP: %s\n", host_ip_);
         close(sockfd);
-        return 1;
+        return;
     }
-
+printf("up to this point\n");
     if (connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
         perror("connection failed");
         close(sockfd);
-        return 1;
+        return;
     }
 
-    char input[MAX_LINE];
-    char response[MAX_LINE];
+printf("point\n");
     FILE *sockf = fdopen(sockfd, "r+"); //read-write
     if (!sockf) {
         perror("fdopen failed");
         close(sockfd);
-        return 1;
+        return;
     }
 
     //send initial command to the client
@@ -164,7 +153,6 @@ void start_worker(sync_info_mem_store* entry, FILE* log_file) {
     while (fgets(line, sizeof(line), sockf)) {
         line[strcspn(line, "\n")] = '\0';   //remove newline if present
         if (strcmp(line, ".") == 0) break;
-
 
 
 printf("%s\n", line);
@@ -313,10 +301,10 @@ int main(int argc, char* argv[]) {
         current->active = 1;
         current->last_sync_time = time(NULL);
         current->error_count = 0;
-
+printf("Starting worker for %s -> %s\n", current->source_dir, current->target_dir);
         //start worker thread for each entry in sync_list and also write to log file
         start_worker(current, log_file);
-
+printf("Worker started for %s -> %s\n", current->source_dir, current->target_dir);
         active_workers++;
         current = current->next;
     }
@@ -329,7 +317,7 @@ int main(int argc, char* argv[]) {
         worker_queue = queue_push(worker_queue, current->source_dir, current->target_dir, "ALL", "FULL");
         current = current->next;
     }
-
+printf("here\n");
 
     //accept nfs_console connection
     int client_fd = accept(server_fd, NULL, NULL);
