@@ -19,6 +19,8 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netdb.h>
+#include <ctype.h>
 
 #include "List.h"
 #include "Queue.h"
@@ -32,6 +34,6 @@ void sigchld_handler(int sig) ;
 
 void parse_config_file(FILE* file, FILE* log_file) ;
 
-void start_worker(const char* src, const char* tgt, const char* filename, const char* operation, FILE* log_file) ;
+void start_worker(sync_info_mem_store* entry, FILE* log_file) ;
 
 int main(int argc, char* argv[]);

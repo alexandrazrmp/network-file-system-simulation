@@ -2,7 +2,8 @@
 
 
 //add entry to linked list
-sync_info_mem_store* add_sync_entry(sync_info_mem_store** sync_list, const char* src, const char* tgt) {
+sync_info_mem_store* add_sync_entry(sync_info_mem_store** sync_list, const char* src, const char* tgt, 
+                                    const char* src_host, int src_port, const char* tgt_host, int tgt_port) {
     sync_info_mem_store* new_entry = malloc(sizeof(sync_info_mem_store));
     if (!new_entry) {
         perror("malloc failed");
@@ -12,6 +13,10 @@ sync_info_mem_store* add_sync_entry(sync_info_mem_store** sync_list, const char*
     //initialize new entry
     strcpy(new_entry->source_dir, src);
     strcpy(new_entry->target_dir, tgt);
+    strcpy(new_entry->source_host, src_host);
+    new_entry->source_port = src_port;
+    strcpy(new_entry->target_host, tgt_host);
+    new_entry->target_port = tgt_port;
     new_entry->last_sync_time = 0;
     new_entry->active = 0;
     new_entry->error_count = 0;

@@ -16,7 +16,7 @@ TRG_MANAGER = nfs_manager.o List.o Queue.o
 all: $(TARGETS)
 
 nfs_manager: $(TRG_MANAGER)
-	$(CC) $(CFLAGS) -o nfs_manager $(TRG_MANAGER)
+	$(CC) $(CFLAGS) -o nfs_manager $(TRG_MANAGER) -lpthread
 
 nfs_console: nfs_console.c
 	$(CC) $(CFLAGS) -o nfs_console nfs_console.c

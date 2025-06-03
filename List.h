@@ -22,7 +22,11 @@
 //linked list to store sync info
 typedef struct sync_info_mem_store_struct {
     char source_dir[PATH_MAX];
+    char source_host[64];
+    int source_port;
     char target_dir[PATH_MAX];
+    char target_host[64];
+    int target_port;
     time_t last_sync_time;
     pid_t worker_pid;  //PID of last worker
     int active;
@@ -32,8 +36,9 @@ typedef struct sync_info_mem_store_struct {
 } sync_info_mem_store;
 
 //add entry to linked list
-sync_info_mem_store* add_sync_entry(sync_info_mem_store** sync_list, const char* src, const char* tgt) ;
-
+sync_info_mem_store* add_sync_entry(sync_info_mem_store** sync_list, const char* src, const char* tgt, 
+                                    const char* src_host, int src_port, const char* tgt_host, int tgt_port);
+                                    
 //check if entry exists in linked list
 sync_info_mem_store* exists_sync_entry(sync_info_mem_store* sync_list, const char* src, const char* tgt) ;
 
