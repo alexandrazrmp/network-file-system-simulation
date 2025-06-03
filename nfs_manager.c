@@ -53,6 +53,10 @@ void parse_config_file(FILE* file, FILE* log_file) {
             
             sync_list = add_sync_entry(&sync_list, source_dir, target_dir, source_host, source_port, target_host, target_port);   //add at the end
             sync_info_mem_store* current = exists_sync_entry(sync_list, source_dir, target_dir);  //get the ptr to the new entry
+            if (current == NULL) {
+                fprintf(stderr, "Entry already exists\n");
+                continue; //ignore
+            }
 
             //print to log file
             fprintf(log_file, "%s Added directory: %s -> %s\n", timebuf, src, tgt);
@@ -74,6 +78,7 @@ void parse_config_file(FILE* file, FILE* log_file) {
     fclose(file);
 }
 
+//worker_function synchronizes source and target files 
 //worker function to be run in a separate thread
 void* worker_function(void* arg) {
     sync_info_mem_store* entry = (sync_info_mem_store*)arg;
@@ -106,31 +111,99 @@ void start_worker(sync_info_mem_store* entry, FILE* log_file) {
     char timebuf[64];
     strftime(timebuf, sizeof(timebuf), "[%Y-%m-%d %H:%M:%S]", t);
 
-    //create worker thread
+    //open connections to source and target directories
+//for now, we will just print the source and target directories
 
-    pthread_t worker_thread;
-    if (pthread_create(&worker_thread, NULL, worker_function, entry) != 0) {
-        perror("pthread_create failed");
-        return;
+    //SOURCE DIRECTORY
+    int host_port = entry->source_port;
+    char *host_ip_ = entry->source_host;
+
+    if (host_port <= 0 || host_port > 65535) {
+        fprintf(stderr, "invalid port number: %d\n", host_port);
+        return 1;
     }
-    //store the thread in the worker thread pool
-    for (int i = 0; i < worker_limit; i++) {
-        if (worker_thread_pool[i] == 0) { //find an empty slot
-            worker_thread_pool[i] = worker_thread;
-            break;
-        }
+
+    //create and connect socket
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) {
+        perror("socket creation failed");
+        return 1;
     }
-    entry->worker_pid = worker_thread; //store the thread ID in the entry
-    worker_array[worker_count++] = entry->worker_pid; //store the PID in the worker array
 
-    printf("%s Worker started for %s -> %s\n", timebuf, entry->source_dir, entry->target_dir);
-    fflush(stdout);
+    struct sockaddr_in serv_addr = {0};
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(host_port);
+    if (inet_pton(AF_INET, host_ip_, &serv_addr.sin_addr) <= 0) {
+        fprintf(stderr, "invalid host IP: %s\n", host_ip_);
+        close(sockfd);
+        return 1;
+    }
 
-    //write to log file
+    if (connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
+        perror("connection failed");
+        close(sockfd);
+        return 1;
+    }
+
+    char input[MAX_LINE];
+    char response[MAX_LINE];
+    FILE *sockf = fdopen(sockfd, "r+"); //read-write
+    if (!sockf) {
+        perror("fdopen failed");
+        close(sockfd);
+        return 1;
+    }
+
+    //send initial command to the client
+    fprintf(sockf, "LIST %s\n", entry->source_dir);
+    fflush(sockf);
+
+    //get response line by line until "."
+    char line[MAX_LINE];
+    printf("Files in %s:\n", entry->source_dir);
+    while (fgets(line, sizeof(line), sockf)) {
+        line[strcspn(line, "\n")] = '\0';   //remove newline if present
+        if (strcmp(line, ".") == 0) break;
+
+
+
+printf("%s\n", line);
+    }
+
+
+    fclose(sockf);  //also closes sockfd
+
+
+
+
+
+
+
+    //create worker thread for each file in the directory
+
+//     pthread_t worker_thread;
+//     if (pthread_create(&worker_thread, NULL, worker_function, entry) != 0) {
+//         perror("pthread_create failed");
+//         return;
+//     }
+//     //store the thread in the worker thread pool
+//     for (int i = 0; i < worker_limit; i++) {
+//         if (worker_thread_pool[i] == 0) { //find an empty slot
+//             worker_thread_pool[i] = worker_thread;
+//             break;
+//         }
+//     }
+//     entry->worker_pid = worker_thread; //store the thread ID in the entry
+//     worker_array[worker_count++] = entry->worker_pid; //store the PID in the worker array
+
+//     printf("%s Worker started for %s -> %s\n", timebuf, entry->source_dir, entry->target_dir);
+//     fflush(stdout);
+
+//     //write to log file
     
-//to fix for every file in dir
-    fprintf(log_file, "%s Added file:  \n", timebuf);
-    fflush(log_file);
+// //to fix for every file in dir
+//     fprintf(log_file, "%s Added file:  \n", timebuf);
+//     fflush(log_file);
 
     return;
 }
@@ -185,10 +258,10 @@ int main(int argc, char* argv[]) {
 
     //socket creation on port number
 
-    int server_fd, new_socket;
+    int server_fd;
     struct sockaddr_in address;
     int opt = 1;
-    int addrlen = sizeof(address);
+
 
     if (port <= 1024 || port > 65535) {
         fprintf(stderr, "invalid port number");
@@ -231,64 +304,6 @@ int main(int argc, char* argv[]) {
 
     //initialize thread pool
     worker_thread_pool = malloc(sizeof(pthread_t) * worker_limit);
-
-
-// //test
-// ///////////////////////////////////////////////////////////////////////////////////////////////////////////
-//     int host_port = 50000;
-//     char *host_ip_ = "127.0.0.1";
-//     if (host_port <= 0 || host_port > 65535) {
-//         fprintf(stderr, "invalid port number: %d\n", host_port);
-//         fclose(log_file);
-//         return 1;
-//     }
-
-//     //create and connect socket
-//     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-//     if (sockfd < 0) {
-//         perror("socket creation failed");
-//         fclose(log_file);
-//         return 1;
-//     }
-
-//     struct sockaddr_in serv_addr = {0};
-//     serv_addr.sin_family = AF_INET;
-//     serv_addr.sin_port = htons(host_port);
-//     if (inet_pton(AF_INET, host_ip_, &serv_addr.sin_addr) <= 0) {
-//         fprintf(stderr, "invalid host IP: %s\n", host_ip_);
-//         close(sockfd);
-//         fclose(log_file);
-//         return 1;
-//     }
-
-//     if (connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
-//         perror("connection failed");
-//         close(sockfd);
-//         fclose(log_file);
-//         return 1;
-//     }
-
-//     char input[MAX_LINE];
-//     char response[MAX_LINE];
-//     FILE *sockf = fdopen(sockfd, "r+"); //read-write
-//     if (!sockf) {
-//         perror("fdopen failed");
-//         close(sockfd);
-//         fclose(log_file);
-//         return 1;
-//     }
-
-//     //send initial command to the client
-//     strcpy(input, "LIST");
-//     write(sockfd, input, strlen(input));
-//     fflush(sockf);
-//     read(sockfd, input, sizeof(input)-1);
-//     printf("%s\n", input);
-
-//     //close the socket
-//     close(sockfd);
-// ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 
     //do the initial sync
     sync_info_mem_store* current = sync_list;
@@ -448,7 +463,7 @@ int main(int argc, char* argv[]) {
 //TO DELETE WHEN I HAVE MESSAGEs EVERYWHERE
         strcpy(response, "ok\n");
         //write response to the socket
-        snprintf(response, sizeof(response), "MANAGER: %s\n", input);
+        snprintf(response, MAX_LINE*2, "MANAGER: %s\n", input);
         if (write(client_fd, response, strlen(response)) < 0) {
             perror("write failed");
             break;
@@ -462,7 +477,6 @@ int main(int argc, char* argv[]) {
 
     //close sockets
     close(server_fd);
-    close(new_socket);
 
     //close log file
     fclose(log_file);

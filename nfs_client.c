@@ -24,6 +24,29 @@
 #define MAX_LINE 4096
 
 
+//function to list files in a directory and send them to the manager
+void list(const char *src_dir, FILE *client_fp) {
+    DIR *dir = opendir(src_dir);
+    if (!dir) {
+        fprintf(stderr, "CLIENT: Failed to open directory '%s': %s\n", src_dir, strerror(errno));
+        fprintf(client_fp, "-1\n.\n");
+        fflush(client_fp);
+        return;
+    }
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        fprintf(client_fp, "%s\n", entry->d_name);
+    }
+
+    fprintf(client_fp, ".\n");  //end of list
+    fflush(client_fp);
+    closedir(dir);
+}
+
+
+
+
 int main(int argc, char *argv[]) {
     int port = 0;
     int opt;
@@ -101,10 +124,9 @@ int main(int argc, char *argv[]) {
         }
 
         char line[MAX_LINE];
-        while (fgets(line, sizeof(line), client_fp) != NULL) {
+        while (fgets(line, sizeof(line), client_fp)) {
 
-            if (line[0] == '\0')
-                continue;
+            line[strcspn(line, "\n")] = 0; //remove newline if present
 
             //get the command and arguments
             char *cmd = strtok(line, " ");
@@ -115,17 +137,19 @@ int main(int argc, char *argv[]) {
             }
 
             if (strcmp(cmd, "LIST") == 0) {
+printf("CLIENT:GOT LIST\n");
                 char *src_dir = strtok(NULL, " ");
                 if (!src_dir) {
                     fprintf(client_fp, "-1 ....");
                     fflush(client_fp);
                     continue;
                 }
-                write(client_fd, "LIST recieved", strlen("LIST recieved"));
-                fflush(client_fp);
-                // list(src_dir, client_fp);
+
+                list(src_dir, client_fp);
+
 
             } else if (strcmp(cmd, "PULL") == 0) {
+printf("CLIENT:GOT PULL\n");                
                 char *file_path = strtok(NULL, " ");
                 if (!file_path) {
                     fprintf(client_fp, "-1 ....");
@@ -135,6 +159,7 @@ int main(int argc, char *argv[]) {
                 // pull(file_path, client_fp, client_fd);
 
             } else if (strcmp(cmd, "PUSH") == 0) {
+printf("CLIENT:GOT PUSH\n");
                 char *file_path = strtok(NULL, " ");
                 char *chunk_str = strtok(NULL, " ");
                 if (!file_path || !chunk_str) {
