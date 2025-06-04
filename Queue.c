@@ -7,12 +7,11 @@ WorkerQueue* queue_create() {
 }
 
 //push to the front of the queue
-WorkerQueue* queue_push(WorkerQueue *worker_queue, const char* src, const char* tgt, const char* filename, const char* operation) {
+WorkerQueue* queue_push(WorkerQueue *worker_queue, const char* src, const char* tgt, const char* filename) {
     WorkerQueue* new_worker = malloc(sizeof(WorkerQueue));
     strcpy(new_worker->source_dir, src);
     strcpy(new_worker->target_dir, tgt);
-    strcpy(new_worker->filename, filename);
-    strcpy(new_worker->operation, operation);
+    strcpy(new_worker->filename, filename); //one file is pushed at a time
     new_worker->next = worker_queue;
     return new_worker;
 }

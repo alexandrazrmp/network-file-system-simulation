@@ -1,7 +1,7 @@
 #include "nfs_manager.h"
 
 int *worker_array; //will be initialized later when worker limit is set
-int worker_count = 0; //number of workers currently running
+int worker_count = 0; //number of workers currently running                     //same as active_workers
 int worker_limit = 0; //maximum number of workers allowed
 pthread_t* worker_thread_pool; //thread pool for worker threads
 
@@ -91,7 +91,7 @@ void* worker_function(void* arg) {
 //achieves connections to the source and target directories
 //calls worker_function to run the worker thread
 
-void start_worker(sync_info_mem_store* entry, FILE* log_file) {
+void start_worker(sync_info_mem_store* entry, FILE* log_file, int client_fd) {
     if (!entry || !log_file) {
         fprintf(stderr, "Invalid entry or log file\n");
         return;
@@ -100,9 +100,6 @@ void start_worker(sync_info_mem_store* entry, FILE* log_file) {
     struct tm *t = localtime(&now);
     char timebuf[64];
     strftime(timebuf, sizeof(timebuf), "[%Y-%m-%d %H:%M:%S]", t);
-
-    //open connections to source and target directories
-//for now, we will just print the source and target directories
 
     //SOURCE DIRECTORY
     int host_port = entry->source_port;
@@ -128,14 +125,14 @@ void start_worker(sync_info_mem_store* entry, FILE* log_file) {
         close(sockfd);
         return;
     }
-printf("up to this point\n");
+
     if (connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
         perror("connection failed");
         close(sockfd);
         return;
     }
 
-printf("point\n");
+
     FILE *sockf = fdopen(sockfd, "r+"); //read-write
     if (!sockf) {
         perror("fdopen failed");
@@ -143,9 +140,16 @@ printf("point\n");
         return;
     }
 
+    //LIST
+
     //send initial command to the client
     fprintf(sockf, "LIST %s\n", entry->source_dir);
     fflush(sockf);
+
+
+    char full_source_dir[PATH_MAX] = {0}, full_target_dir[PATH_MAX] = {0};
+    snprintf(full_source_dir, sizeof(full_source_dir)+1024, "/%s@%s:%d", entry->source_dir, entry->source_host, entry->source_port);
+    snprintf(full_target_dir, sizeof(full_target_dir)+1024, "/%s@%s:%d", entry->target_dir, entry->target_host, entry->target_port);
 
     //get response line by line until "."
     char line[MAX_LINE];
@@ -153,16 +157,26 @@ printf("point\n");
     while (fgets(line, sizeof(line), sockf)) {
         line[strcspn(line, "\n")] = '\0';   //remove newline if present
         if (strcmp(line, ".") == 0) break;
+        //push the filename to queue
+        worker_queue = queue_push(worker_queue, full_source_dir, full_target_dir, (const char*)line); //push to the queue
 
+        char full_source_file[PATH_MAX] = {0}, full_target_file[PATH_MAX] = {0};
+        snprintf(full_source_file, sizeof(full_source_file)*3, "/%s/%s@%s:%d", entry->source_dir, (char*)line, entry->source_host, entry->source_port);
+        snprintf(full_target_file, sizeof(full_target_file)*3, "/%s/%s@%s:%d", entry->target_dir, (char*)line, entry->target_host, entry->target_port);
 
-printf("%s\n", line);
+        printf("%s Added file: %s -> %s\n", timebuf, full_source_file, full_target_file);
+        fflush(stdout);
+        //write to the socket to the console
+        char write_buf[1024];
+        int len = snprintf(write_buf, sizeof(write_buf), "%s Added file: %s -> %s\n", timebuf, full_source_file, full_target_file);
+        write(client_fd, write_buf, len); // len is string length
+        //also write to log file
+        fprintf(log_file, "%s Added file: %s -> %s\n", timebuf, full_source_file, full_target_file);
+        fflush(log_file); // flush to ensure it's written immediately
+
     }
 
-
     fclose(sockf);  //also closes sockfd
-
-
-
 
 
 
@@ -295,29 +309,7 @@ int main(int argc, char* argv[]) {
 
     //do the initial sync
     sync_info_mem_store* current = sync_list;
-    int active_workers = 0;
 
-    while (current != NULL && active_workers < worker_limit) {
-        current->active = 1;
-        current->last_sync_time = time(NULL);
-        current->error_count = 0;
-printf("Starting worker for %s -> %s\n", current->source_dir, current->target_dir);
-        //start worker thread for each entry in sync_list and also write to log file
-        start_worker(current, log_file);
-printf("Worker started for %s -> %s\n", current->source_dir, current->target_dir);
-        active_workers++;
-        current = current->next;
-    }
-
-    worker_queue = queue_create();
-
-    //if there are more entries, add them to the queue
-
-    while (current != NULL) {
-        worker_queue = queue_push(worker_queue, current->source_dir, current->target_dir, "ALL", "FULL");
-        current = current->next;
-    }
-printf("here\n");
 
     //accept nfs_console connection
     int client_fd = accept(server_fd, NULL, NULL);
@@ -327,10 +319,23 @@ printf("here\n");
     }
     printf("Console-Manager connection achieved\n");
 
+    while (current != NULL) {
+        current->active = 1;
+        current->last_sync_time = time(NULL);
+        current->error_count = 0;
+        //start worker thread for each entry in sync_list and also write to log file
+        start_worker(current, log_file, client_fd);
+        // active_workers++;    //just because we start a worker, it DOES NOT mean it is active
+        current = current->next;
+    }
+
 
     char input[MAX_LINE];
     char response[MAX_LINE];
 
+    //initialize the worker queue
+    worker_queue = queue_create(); //create an empty queue
+    //it will be used to store the workers that are waiting for a slot to be available to sync a file of a directory
 
     while (1) {              //get console input and handle it
 
@@ -369,7 +374,7 @@ printf("here\n");
         if (arg1 != NULL) {
             int a = sscanf(arg1, "/%[^@]@%[^:]:%d", source_dir, source_host, &source_port) ; 
             //input is corerct from console, so we can assume it is valid
-            if (a != 3) {   //but still, if it is not, we can ignore it
+            if (a != 3) {   //but still, if it is not, break
                 fprintf(stderr, "invalid input format\n");
                 break;
             }
@@ -378,7 +383,7 @@ printf("here\n");
         if (arg2 != NULL) {
             int a = sscanf(arg2, "/%[^@]@%[^:]:%d", target_dir, target_host, &target_port) ; 
             //input is corerct from console, so we can assume it is valid
-            if (a != 3) {   //but still, if it is not, we can ignore it
+            if (a != 3) {   //but still, if it is not, break
                 fprintf(stderr, "invalid input format\n");
                 break;
             }
@@ -416,34 +421,27 @@ printf("here\n");
 
 
         } else if (strcmp(instruction, "add") == 0) {
-            if (worker_count < worker_limit) {
 
-                if (exists_in_queue(worker_queue, arg1)) {
-                    printf("%s Already in queue: %s\n", timebuf, arg1);
-                    write(client_fd, "Already in queue\n", strlen("Already in queue\n"));
+            if (exists_in_queue(worker_queue, arg1)) {
+                printf("%s Already in queue: %s\n", timebuf, arg1);
+                write(client_fd, "Already in queue\n", strlen("Already in queue\n"));
+            }
+            else {
+                //add to sync_list and start worker
+                sync_list = add_sync_entry(&sync_list, source_dir, target_dir, source_host, source_port, target_host, target_port); //add at the end
+                sync_info_mem_store* current = exists_sync_entry(sync_list, source_dir, target_dir);  //get the ptr to the new entry
 
+                if (current == NULL) {
+                    fprintf(stderr, "Entry already exists\n");
+                    break;
                 }
-                else {
-                    //add to sync_list and start worker
-                    sync_list = add_sync_entry(&sync_list, source_dir, target_dir, source_host, source_port, target_host, target_port); //add at the end
-                    sync_info_mem_store* current = exists_sync_entry(sync_list, source_dir, target_dir);  //get the ptr to the new entry
+                current->active = 1;
+                current->last_sync_time = time(NULL);
+                current->error_count = 0;
 
-                    if (current == NULL) {
-                        fprintf(stderr, "Entry already exists\n");
-                        break;
-                    }
-                    current->active = 1;
-                    current->last_sync_time = time(NULL);
-                    current->error_count = 0;
+                //write to log file in worker initialization
+                start_worker(current, log_file, client_fd);
 
-                    //write to log file in worker initialization
-                    start_worker(current, log_file);
-                    worker_count++;
-                    printf("%s Added file: %s -> %s\n", timebuf, arg1, arg2);
-                    char write_buf[1024];
-                    int len = snprintf(write_buf, sizeof(write_buf), "%s Added file: %s -> %s\n", timebuf, arg1, arg2);
-                    write(client_fd, write_buf, len); // len is string length
-                }
             }
 
         }

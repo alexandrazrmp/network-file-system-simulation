@@ -28,7 +28,6 @@
 void list(const char *src_dir, FILE *client_fp) {
     DIR *dir = opendir(src_dir);
     if (!dir) {
-        fprintf(stderr, "CLIENT: Failed to open directory '%s': %s\n", src_dir, strerror(errno));
         fprintf(client_fp, "-1\n.\n");
         fflush(client_fp);
         return;
@@ -137,7 +136,6 @@ int main(int argc, char *argv[]) {
             }
 
             if (strcmp(cmd, "LIST") == 0) {
-printf("CLIENT:GOT LIST\n");
                 char *src_dir = strtok(NULL, " ");
                 if (!src_dir) {
                     fprintf(client_fp, "-1 ....");
@@ -146,7 +144,6 @@ printf("CLIENT:GOT LIST\n");
                 }
 
                 list(src_dir, client_fp);
-
 
             } else if (strcmp(cmd, "PULL") == 0) {
 printf("CLIENT:GOT PULL\n");                

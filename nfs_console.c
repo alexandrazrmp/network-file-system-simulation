@@ -122,6 +122,27 @@ int main(int argc, char *argv[]) {
         arg1 = strtok(NULL, " ");
         arg2 = strtok(NULL, " ");
 
+        char source_dir[PATH_MAX] = {0}, source_host[64] = {0};
+        int source_port = 0;
+        char target_dir[PATH_MAX] = {0}, target_host[64] = {0};
+        int target_port = 0;
+
+        if (arg1 != NULL) {
+            int a = sscanf(arg1, "/%[^@]@%[^:]:%d", source_dir, source_host, &source_port) ; 
+            if (a != 3) {
+                fprintf(stderr, "CONSOLE recieved invalid input format\n");
+                continue;
+            }
+        }
+        
+        if (arg2 != NULL) {
+            int a = sscanf(arg2, "/%[^@]@%[^:]:%d", target_dir, target_host, &target_port) ; 
+            if (a != 3) {
+                fprintf(stderr, "CONSOLE recieved invalid input format\n");
+                continue;
+            }
+        }
+
         if (strcmp(instruction, "shutdown") == 0) {
             if (arg1 != NULL) {
                 fprintf(stderr, "CONSOLE received invalid shutdown instruction\n");
