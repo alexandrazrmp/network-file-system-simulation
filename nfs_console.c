@@ -197,10 +197,17 @@ int main(int argc, char *argv[]) {
 
         //wait and read response from manager
         FILE *sockf = fdopen(sockfd, "r");
-        if (fgets(response, sizeof(response), sockf)) {
-            printf("%s", response);
+        if (fgets(response, sizeof(response), sockf) == NULL) {
+            perror("Failed to read response from manager");
+            close(sockfd);
+            fclose(log_file);
+            return 1;
         }
 
+        //print the response to the console
+        printf("%s", response);
+        fflush(stdout); //print immediately
+sleep(1);   //sleep for a second to allow the console to print
         if (break_flag) {
             close(sockfd); //close the socket
             fclose(log_file); //close the log file
@@ -209,6 +216,8 @@ int main(int argc, char *argv[]) {
 
 
     }
+
+    //nothing to write
 
 
     return(0);

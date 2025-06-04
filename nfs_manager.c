@@ -156,6 +156,7 @@ void start_worker(sync_info_mem_store* entry, FILE* log_file, int client_fd) {
     printf("Files in %s:\n", entry->source_dir);
     while (fgets(line, sizeof(line), sockf)) {
         line[strcspn(line, "\n")] = '\0';   //remove newline if present
+        if (strcmp(line, "..") == 0) continue; //skip ..
         if (strcmp(line, ".") == 0) break;
         //push the filename to queue
         worker_queue = queue_push(worker_queue, full_source_dir, full_target_dir, (const char*)line); //push to the queue
@@ -398,15 +399,23 @@ int main(int argc, char* argv[]) {
         if (strcmp(instruction, "shutdown") == 0) {
             //print messages
             printf("%s Shutting down manager...\n", timebuf);
+            fflush(stdout);
+            //send message to the console
+            snprintf(response, sizeof(response), "%s Shutting down manager...\n", timebuf);
+            if (write(client_fd, response, strlen(response)) < 0) {
+                perror("write failed");
+            }
             printf("%s Waiting for all active workers to finish.\n", timebuf);
             fflush(stdout);
+            //send message to the console
+            snprintf(response, sizeof(response), "%s Waiting for all active workers to finish.\n", timebuf);
+            if (write(client_fd, response, strlen(response)) < 0) {
+                perror("write failed");
+            }
             //printing to be continued after "break" to actually wait for all workers to finish
             break;
     
         } else if (strcmp(instruction, "cancel") == 0) {
-
-
-            printf("%s Canceling operation for %s\n", timebuf, arg1);
 
             //find the entry in sync_list and set active to 0
             sync_info_mem_store* entry = exists_sync_entry(sync_list, source_dir, NULL);
@@ -414,11 +423,25 @@ int main(int argc, char* argv[]) {
                 entry->active = 0; //set active to 0
                 entry->last_sync_time = time(NULL); //update last sync time
                 entry->error_count = 0; //reset error count
-                printf("%s Operation for %s canceled.\n", timebuf, arg1);
-            } else {
-                printf("%s No active operation found for %s.\n", timebuf, arg1);
-            }
 
+                printf("%s Synchronization stopped for %s\n", timebuf, arg1);
+                fflush(stdout); //print immediately
+                //write to logfile and send to console
+                fprintf(log_file, "%s Synchronization stopped for %s\n", timebuf, arg1);
+                fflush(log_file); // flush to ensure it's written immediately
+                snprintf(response, sizeof(response), "%s Synchronization stopped for %s\n", timebuf, arg1);
+                if (write(client_fd, response, strlen(response)) < 0) {
+                    perror("write failed");
+                }
+            } else {
+                printf("%s Directory not being synchronized: %s.\n", timebuf, arg1);
+                fflush(stdout); //print immediately
+                //send to console
+                snprintf(response, sizeof(response), "%s Directory not being synchronized: %s.\n", timebuf, arg1);
+                if (write(client_fd, response, strlen(response)) < 0) {
+                    perror("write failed");
+                }
+            }
 
         } else if (strcmp(instruction, "add") == 0) {
 
@@ -446,17 +469,6 @@ int main(int argc, char* argv[]) {
 
         }
     
-//TO DELETE WHEN I HAVE MESSAGEs EVERYWHERE
-        strcpy(response, "ok\n");
-        //write response to the socket
-        snprintf(response, MAX_LINE*2, "MANAGER: %s\n", input);
-        if (write(client_fd, response, strlen(response)) < 0) {
-            perror("write failed");
-            break;
-        }
-
-
-    //     //SIGCHLD handler
 
     }
 
@@ -489,8 +501,6 @@ int main(int argc, char* argv[]) {
     }
     free(worker_array); //free the worker array
 
-
-
     time_t now = time(NULL);
     struct tm *t = localtime(&now);
     char timebuf[64];
@@ -499,5 +509,14 @@ int main(int argc, char* argv[]) {
 
     printf("%s Manager shutdown complete.\n", timebuf);
     fflush(stdout);
+
+    //send message to the console
+    snprintf(response, sizeof(response), "%s Manager shutdown complete.\n", timebuf);
+    if (write(client_fd, response, strlen(response)) < 0) {
+        perror("write failed");
+    }
+    close(client_fd); //close the client socket
+
+
     return 0;
 }
