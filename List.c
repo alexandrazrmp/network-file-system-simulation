@@ -47,6 +47,7 @@ sync_info_mem_store* exists_sync_entry(sync_info_mem_store* sync_list, const cha
             }
             //if target directory is given and pair matches, return the entry
             if (tgt != NULL && strcmp(current->target_dir, tgt) == 0) {
+
                 return current;
             } 
             return NULL;  //error code, cannot have same source and different target

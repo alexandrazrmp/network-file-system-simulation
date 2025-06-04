@@ -162,6 +162,17 @@ void start_worker(sync_info_mem_store* entry, FILE* log_file, int console_fd) {
             continue; //skip lines starting with . that are not just a dot
         }
 
+        //check if the file already exists in the queue
+        if (exists_in_queue(worker_queue, full_source_dir, full_target_dir, (const char*)line)) {   //line is the filename
+            printf("%s Already in queue: %s\n", timebuf, line);
+            fflush(stdout);
+            //write to console
+            char write_buf[1024];
+            int len = snprintf(write_buf, sizeof(write_buf), "%s Already in queue: %s\n", timebuf, line);
+            write(console_fd, write_buf, len); // len is string length
+            continue; //skip if it already exists in the queue
+        }
+
         //push the filename to queue
         worker_queue = queue_push(worker_queue, full_source_dir, full_target_dir, (const char*)line); //push to the queue
 
@@ -324,11 +335,13 @@ int main(int argc, char* argv[]) {
     }
     printf("Console-Manager connection achieved\n");
 
+    close(server_fd); //close the server socket as we don't need it anymore
+
     while (current != NULL) {
         current->active = 1;
         current->last_sync_time = time(NULL);
         current->error_count = 0;
-        //start worker thread for each entry in sync_list and also write to log file
+        //prepare to start worker for each entry in sync_list and also write to log file
         start_worker(current, log_file, console_fd);
         // active_workers++;    //just because we start a worker, it DOES NOT mean it is active
         current = current->next;
@@ -449,27 +462,20 @@ int main(int argc, char* argv[]) {
 
         } else if (strcmp(instruction, "add") == 0) {
 
-            if (exists_in_queue(worker_queue, arg1)) {
-                printf("%s Already in queue: %s\n", timebuf, arg1);
-                write(console_fd, "Already in queue\n", strlen("Already in queue\n"));
+            //add to sync_list and start worker
+            sync_list = add_sync_entry(&sync_list, source_dir, target_dir, source_host, source_port, target_host, target_port); //add at the end
+            sync_info_mem_store* current = exists_sync_entry(sync_list, source_dir, target_dir);  //get the ptr to the new entry
+
+            if (current == NULL) {
+                fprintf(stderr, "Entry already exists (this has \n");
+                break;
             }
-            else {
-                //add to sync_list and start worker
-                sync_list = add_sync_entry(&sync_list, source_dir, target_dir, source_host, source_port, target_host, target_port); //add at the end
-                sync_info_mem_store* current = exists_sync_entry(sync_list, source_dir, target_dir);  //get the ptr to the new entry
+            current->active = 1;
+            current->last_sync_time = time(NULL);
+            current->error_count = 0;
 
-                if (current == NULL) {
-                    fprintf(stderr, "Entry already exists\n");
-                    break;
-                }
-                current->active = 1;
-                current->last_sync_time = time(NULL);
-                current->error_count = 0;
-
-                //write to log file in worker initialization
-                start_worker(current, log_file, console_fd);
-
-            }
+            //write to log file in worker initialization
+            start_worker(current, log_file, console_fd);
 
         }
     
@@ -483,9 +489,6 @@ int main(int argc, char* argv[]) {
 
     }
 
-
-    //close sockets
-    close(server_fd);
 
     //close log file
     fclose(log_file);

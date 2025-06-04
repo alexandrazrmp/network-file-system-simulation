@@ -35,12 +35,21 @@ WorkerQueue* queue_pop(WorkerQueue **worker_queue) {
     return last;
 }
 
-int exists_in_queue(WorkerQueue *worker_queue, const char* src) {
+int exists_in_queue(WorkerQueue *worker_queue, const char* src, const char* tgt, const char* filename) {
     WorkerQueue *cur = worker_queue;
     while (cur != NULL) {
-        if (strcmp(cur->source_dir, src) == 0) {
+
+        //debugging message
+        printf("Checking: %s %s %s\n", cur->source_dir, cur->target_dir, cur->filename);
+        printf("Against: %s %s %s\n", src, tgt, filename);
+
+        if (strcmp(cur->source_dir, src) == 0 &&
+            strcmp(cur->target_dir, tgt) == 0 &&
+            strcmp(cur->filename, filename) == 0) {
+printf("yes they are the same\n");
             return 1;
         }
+printf("no they are not the same\n");
         cur = cur->next;
     }
     return 0;
