@@ -195,19 +195,24 @@ int main(int argc, char *argv[]) {
         //write to the socket
         dprintf(sockfd, "%s\n", copy);
 
-        //wait and read response from manager
+        //wait and read responses from manager
         FILE *sockf = fdopen(sockfd, "r");
-        if (fgets(response, sizeof(response), sockf) == NULL) {
-            perror("Failed to read response from manager");
+        if (!sockf) {
+            perror("fdopen");
             close(sockfd);
             fclose(log_file);
             return 1;
         }
 
-        //print the response to the console
-        printf("%s", response);
-        fflush(stdout); //print immediately
-sleep(1);   //sleep for a second to allow the console to print
+        while (fgets(response, sizeof(response), sockf)) {
+            if (strcmp(response, "END\n") == 0)
+                break;
+
+            printf("%s", response);
+            fflush(stdout); // print each line immediately
+        }
+
+
         if (break_flag) {
             close(sockfd); //close the socket
             fclose(log_file); //close the log file

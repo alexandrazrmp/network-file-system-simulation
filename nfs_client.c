@@ -28,14 +28,18 @@
 void list(const char *src_dir, FILE *client_fp) {
     DIR *dir = opendir(src_dir);
     if (!dir) {
-        fprintf(client_fp, "-1\n.\n");
+        fprintf(client_fp, "-1\n");
         fflush(client_fp);
         return;
     }
 
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue; //skip . and ..
+        }
         fprintf(client_fp, "%s\n", entry->d_name);
+        fflush(client_fp);
     }
 
     fprintf(client_fp, ".\n");  //end of list
@@ -138,7 +142,7 @@ int main(int argc, char *argv[]) {
             if (strcmp(cmd, "LIST") == 0) {
                 char *src_dir = strtok(NULL, " ");
                 if (!src_dir) {
-                    fprintf(client_fp, "-1 ....");
+                    fprintf(client_fp, "-1");
                     fflush(client_fp);
                     continue;
                 }
@@ -149,7 +153,7 @@ int main(int argc, char *argv[]) {
 printf("CLIENT:GOT PULL\n");                
                 char *file_path = strtok(NULL, " ");
                 if (!file_path) {
-                    fprintf(client_fp, "-1 ....");
+                    fprintf(client_fp, "-1");
                     fflush(client_fp);
                     continue;
                 }
@@ -160,14 +164,14 @@ printf("CLIENT:GOT PUSH\n");
                 char *file_path = strtok(NULL, " ");
                 char *chunk_str = strtok(NULL, " ");
                 if (!file_path || !chunk_str) {
-                    fprintf(client_fp, "-1 ....");
+                    fprintf(client_fp, "-1");
                     fflush(client_fp);
                     continue;
                 }
                 errno = 0;
                 // long chunk_size = strtol(chunk_str, NULL, 10);
                 if (errno != 0) {
-                    fprintf(client_fp, "-1 ....");
+                    fprintf(client_fp, "-1");
                     fflush(client_fp);
                     continue;
                 }

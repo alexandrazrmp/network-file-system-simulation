@@ -91,7 +91,7 @@ void* worker_function(void* arg) {
 //achieves connections to the source and target directories
 //calls worker_function to run the worker thread
 
-void start_worker(sync_info_mem_store* entry, FILE* log_file, int client_fd) {
+void start_worker(sync_info_mem_store* entry, FILE* log_file, int console_fd) {
     if (!entry || !log_file) {
         fprintf(stderr, "Invalid entry or log file\n");
         return;
@@ -153,11 +153,15 @@ void start_worker(sync_info_mem_store* entry, FILE* log_file, int client_fd) {
 
     //get response line by line until "."
     char line[MAX_LINE];
-    printf("Files in %s:\n", entry->source_dir);
+
     while (fgets(line, sizeof(line), sockf)) {
-        line[strcspn(line, "\n")] = '\0';   //remove newline if present
-        if (strcmp(line, "..") == 0) continue; //skip ..
+        line[strcspn(line, "\n")] = '\0';   //remove newline if present)
         if (strcmp(line, ".") == 0) break;
+        //if line starts with . continue;
+        if (line[0] == '.') {
+            continue; //skip lines starting with . that are not just a dot
+        }
+
         //push the filename to queue
         worker_queue = queue_push(worker_queue, full_source_dir, full_target_dir, (const char*)line); //push to the queue
 
@@ -170,7 +174,7 @@ void start_worker(sync_info_mem_store* entry, FILE* log_file, int client_fd) {
         //write to the socket to the console
         char write_buf[1024];
         int len = snprintf(write_buf, sizeof(write_buf), "%s Added file: %s -> %s\n", timebuf, full_source_file, full_target_file);
-        write(client_fd, write_buf, len); // len is string length
+        write(console_fd, write_buf, len); // len is string length
         //also write to log file
         fprintf(log_file, "%s Added file: %s -> %s\n", timebuf, full_source_file, full_target_file);
         fflush(log_file); // flush to ensure it's written immediately
@@ -313,8 +317,8 @@ int main(int argc, char* argv[]) {
 
 
     //accept nfs_console connection
-    int client_fd = accept(server_fd, NULL, NULL);
-    if (client_fd < 0) {
+    int console_fd = accept(server_fd, NULL, NULL);
+    if (console_fd < 0) {
         perror("accept");
         exit(1);
     }
@@ -325,7 +329,7 @@ int main(int argc, char* argv[]) {
         current->last_sync_time = time(NULL);
         current->error_count = 0;
         //start worker thread for each entry in sync_list and also write to log file
-        start_worker(current, log_file, client_fd);
+        start_worker(current, log_file, console_fd);
         // active_workers++;    //just because we start a worker, it DOES NOT mean it is active
         current = current->next;
     }
@@ -341,7 +345,7 @@ int main(int argc, char* argv[]) {
     while (1) {              //get console input and handle it
 
         fflush(stdout);
-        ssize_t n = read(client_fd, input, sizeof(input)-1);
+        ssize_t n = read(console_fd, input, sizeof(input)-1);
         if (n <= 0) {
             if (n < 0) perror("read failed");
             break;
@@ -402,14 +406,14 @@ int main(int argc, char* argv[]) {
             fflush(stdout);
             //send message to the console
             snprintf(response, sizeof(response), "%s Shutting down manager...\n", timebuf);
-            if (write(client_fd, response, strlen(response)) < 0) {
+            if (write(console_fd, response, strlen(response)) < 0) {
                 perror("write failed");
             }
             printf("%s Waiting for all active workers to finish.\n", timebuf);
             fflush(stdout);
             //send message to the console
             snprintf(response, sizeof(response), "%s Waiting for all active workers to finish.\n", timebuf);
-            if (write(client_fd, response, strlen(response)) < 0) {
+            if (write(console_fd, response, strlen(response)) < 0) {
                 perror("write failed");
             }
             //printing to be continued after "break" to actually wait for all workers to finish
@@ -430,7 +434,7 @@ int main(int argc, char* argv[]) {
                 fprintf(log_file, "%s Synchronization stopped for %s\n", timebuf, arg1);
                 fflush(log_file); // flush to ensure it's written immediately
                 snprintf(response, sizeof(response), "%s Synchronization stopped for %s\n", timebuf, arg1);
-                if (write(client_fd, response, strlen(response)) < 0) {
+                if (write(console_fd, response, strlen(response)) < 0) {
                     perror("write failed");
                 }
             } else {
@@ -438,7 +442,7 @@ int main(int argc, char* argv[]) {
                 fflush(stdout); //print immediately
                 //send to console
                 snprintf(response, sizeof(response), "%s Directory not being synchronized: %s.\n", timebuf, arg1);
-                if (write(client_fd, response, strlen(response)) < 0) {
+                if (write(console_fd, response, strlen(response)) < 0) {
                     perror("write failed");
                 }
             }
@@ -447,7 +451,7 @@ int main(int argc, char* argv[]) {
 
             if (exists_in_queue(worker_queue, arg1)) {
                 printf("%s Already in queue: %s\n", timebuf, arg1);
-                write(client_fd, "Already in queue\n", strlen("Already in queue\n"));
+                write(console_fd, "Already in queue\n", strlen("Already in queue\n"));
             }
             else {
                 //add to sync_list and start worker
@@ -463,12 +467,19 @@ int main(int argc, char* argv[]) {
                 current->error_count = 0;
 
                 //write to log file in worker initialization
-                start_worker(current, log_file, client_fd);
+                start_worker(current, log_file, console_fd);
 
             }
 
         }
     
+
+        //write to console that input is done
+        snprintf(response, sizeof(response), "END\n");
+        if (write(console_fd, response, strlen(response)) < 0) {
+            perror("write failed");
+        }
+
 
     }
 
@@ -512,11 +523,18 @@ int main(int argc, char* argv[]) {
 
     //send message to the console
     snprintf(response, sizeof(response), "%s Manager shutdown complete.\n", timebuf);
-    if (write(client_fd, response, strlen(response)) < 0) {
+    if (write(console_fd, response, strlen(response)) < 0) {
         perror("write failed");
     }
-    close(client_fd); //close the client socket
 
+    //write to console that input is done
+    snprintf(response, sizeof(response), "END\n");
+    if (write(console_fd, response, strlen(response)) < 0) {
+        perror("write failed");
+    }
+
+
+    close(console_fd); //close the client socket
 
     return 0;
 }
