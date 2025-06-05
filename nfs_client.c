@@ -20,6 +20,8 @@
 #include <netinet/in.h>
 #include <dirent.h>
 #include <time.h>
+#include <libgen.h>
+
 
 #define MAX_LINE 4096
 
@@ -49,34 +51,57 @@ void list(const char *src_dir, FILE *client_fp) {
 
 
 //function to pull a file from the source directory
-void pull(const char *file_path, int client_fd) {
-    //get the full path of the file
-    //it is located locally in the same directory as the client
+void pull(const char *file, int client_fd) {
+    //file is in the form of /source_dir/file
+    //and /source_dir is the directory where the client is running
 
-    int fd = open(file_path, O_RDONLY);
-    if (fd < 0) {
-        const char *error_msg = "-1\n";
-        write(client_fd, error_msg, strlen(error_msg));
+    //get the real path of the file same as this program
+
+    char exe_path[PATH_MAX];
+    ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
+    if (len == -1) {
+        perror("readlink failed");
+        return;
+    }
+    exe_path[len] = '\0';  // Null-terminate the string
+
+    //get the directory where the program is located
+    char *dir_path = dirname(exe_path);
+
+    //construct the full path to the file
+    char file_path[PATH_MAX];
+    snprintf(file_path, sizeof(file_path), "%s%s", dir_path, file);
+
+    printf("CLIENT: Pulling file: %s\n", file_path);
+
+    
+    //open the file for reading
+    FILE *fp = fopen(file_path, "rb");
+    if (!fp) {
+        perror("fopen failed");
         return;
     }
 
-    char buffer[MAX_LINE];
-    ssize_t bytes_read;
-    while ((bytes_read = read(fd, buffer, sizeof(buffer))) > 0) {
-        if (write(client_fd, buffer, bytes_read) < 0) {
-            perror("write failed");
-            close(fd);
-            return;
-        }
-    }
+    //send the file to the client until it stops reading
+    char buffer[1024* 1024]; //1 MB buffer
+    size_t bytes_read = 0;
+    bytes_read = fread(buffer, 1, sizeof(buffer)-1, fp);
+    //add eof at the end of the file
+    buffer[bytes_read] = '\0'; //null terminate the buffer
 
-    if (bytes_read < 0) {
-        perror("read failed");
-    }
+    //write to the manager
+    write(client_fd, buffer, sizeof(buffer));
 
-    close(fd);
-    const char *success_msg = "0\n";
-    write(client_fd, success_msg, strlen(success_msg));
+
+    //read the file in chunks and send to the client
+    //if we reach the end of the file, we will stop reading and reset bytes_read to 0
+    //this is to ensure that we can read the file in chunks and not send the whole file at once
+
+
+
+    //close the file
+    fclose(fp);
+
 }
 
 

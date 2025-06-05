@@ -167,40 +167,37 @@ void* worker_function(void* arg) {
         return NULL;
     }
 
-    // ssize_t chunk_size = 0; //size of the chunk to be received from source and then pushed to the target
+    ssize_t chunk_size = 0; //size of the chunk to be received from source and then pushed to the target
 
-    // //PULL
+    //pull and push in a loop
 
-    // //send command to the SOURCE client
-    // write(sockfd, "PULL /", 6);
-    // write(sockfd, entry->source_dir, strlen(entry->source_dir));
-    // write(sockfd, "/", 1);
-    // write(sockfd, entry->filename, strlen(entry->filename));
-    // write(sockfd, "\n", 1);
-    // fflush(sockf); //flush to ensure the command is sent
+        //PULL
 
-    // char buffer[MAX_CHUNK_SIZE]; //buffer to read data from source
+        //send command to the SOURCE client
+        write(sockfd, "PULL /", 6);
+        write(sockfd, entry->source_dir, strlen(entry->source_dir));
+        write(sockfd, "/", 1);
+        write(sockfd, entry->filename, strlen(entry->filename));
+        write(sockfd, "\n", 1);
+        fflush(sockf); //flush to ensure the command is sent
 
+        char buffer[MAX_CHUNK_SIZE]; //buffer to read data from source
+        ssize_t bytes_read = 0; //number of bytes read from source
 
-    // //read data from source chunk size
-    // chunk_size = read(sockfd, buffer, sizeof(buffer)); //read data from source
+        bytes_read = read(sockfd, buffer, sizeof(buffer)); //read the response from source
 
-    // if (chunk_size < 0) {
-    //     perror("read failed from source");
-    // }
-
-    // //print buffer to debug
-    // buffer[chunk_size] = '\0'; //null terminate the buffer
-    // printf("Worker for %s : %s received %zd bytes from source.\n", entry->source_dir, entry->filename, chunk_size);
-    // printf("Data: %s\n", buffer); //print the data received from source
+        printf("Worker for %s : %s received %zd bytes from source.\n", entry->source_dir, entry->filename, bytes_read);
+        fflush(stdout); //flush to ensure the message is printed immediately
+        printf("Data received: %.*s\n", (int)bytes_read, buffer); //print the data received
+        fflush(stdout);
 
 
-    //PUSH
+        //PUSH
 
+        //send the command to the TARGET client
 
 
 sleep(5);
-
 
     printf("Worker for %s : %s finished.\n", entry->source_dir, entry->filename);
     fflush(stdout); //flush to ensure the message is printed immediately
@@ -247,10 +244,11 @@ void* worker_handler(void* arg) {
         //if there is a worker in the queue, pop it and start a thread
         if ((cur = queue_pop(&worker_queue)) != NULL) {  //if there is a worker in the queue
             pthread_mutex_lock(&worker_count_mutex);
+            int index = worker_count;
             worker_count++;
             pthread_mutex_unlock(&worker_count_mutex);
             //create a thread for the worker
-            if (pthread_create(&worker_thread_pool[worker_count - 1], NULL, worker_function, cur) != 0) {
+            if (pthread_create(&worker_thread_pool[index], NULL, worker_function, cur) != 0) {
                 printf("pthread_create failed for worker thread\n");
                 free(cur); //free the worker queue node
                 pthread_mutex_lock(&worker_count_mutex);
