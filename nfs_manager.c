@@ -1,13 +1,22 @@
 #include "nfs_manager.h"
 
-int *worker_array; //will be initialized later when worker limit is set
 int worker_count = 0; //number of workers currently running                     //same as active_workers
 int worker_limit = 0; //maximum number of workers allowed
 pthread_t* worker_thread_pool; //thread pool for worker threads
 
+int stop_worker_handler = 0; //flag to stop the worker handler thread
+
 sync_info_mem_store* sync_list = NULL;
 
 WorkerQueue* worker_queue = NULL;
+
+
+//mutex to handle worker count
+pthread_mutex_t worker_count_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+//condition that allows a thread to start when another worker thread finishes
+pthread_cond_t worker_count_cond = PTHREAD_COND_INITIALIZER; //condition variable to wait for a worker to finish
+
 
 
 //signal handler for SIGCHLD
@@ -72,25 +81,71 @@ void parse_config_file(FILE* file) {
 //worker_function synchronizes source and target files 
 //worker function to be run in a separate thread
 void* worker_function(void* arg) {
-    sync_info_mem_store* entry = (sync_info_mem_store*)arg;
-    if (!entry) {
-        fprintf(stderr, "Invalid entry\n");
-        return NULL;
-    }
 
     //example
-    printf("Worker for %s -> %s started.\n", entry->source_dir, entry->target_dir);
-    sleep(2);
-    printf("Worker for %s -> %s finished.\n", entry->source_dir, entry->target_dir);
+    printf("Worker for %s : %s started.\n", ((WorkerQueue*)arg)->source_dir, ((WorkerQueue*)arg)->filename);
+    sleep(5); //simulate work being done
+    printf("Worker for %s : %s finished.\n", ((WorkerQueue*)arg)->source_dir, ((WorkerQueue*)arg)->filename);
+
+    //signal that this worker is done
+
+    pthread_mutex_lock(&worker_count_mutex);
+    worker_count--; //decrease worker count
+    pthread_cond_signal(&worker_count_cond); //signal that a worker is done
+    pthread_mutex_unlock(&worker_count_mutex);
 
     return NULL;
 }
 
 
-//start worker achieves the following:
-//creates a worker thread for the given sync_info_mem_store entry and stores the thread in the worker thread pool
-//achieves connections to the source and target directories
-//calls worker_function to run the worker thread
+void* worker_handler(void* arg) {
+    //worker handler to handle the worker threads
+    worker_queue = (WorkerQueue*)arg; //cast arg to WorkerQueue pointer
+    WorkerQueue* cur = worker_queue; //current worker in the queue
+
+    while (1) {                 //loop until program ends
+
+        //wait for a worker to finish
+        pthread_mutex_lock(&worker_count_mutex);
+        if (worker_count >= worker_limit) { //if worker count is at limit, wait for a worker to finish
+            pthread_cond_wait(&worker_count_cond, &worker_count_mutex);
+        }
+        pthread_mutex_unlock(&worker_count_mutex);
+
+        //check if we need to stop the worker handler thread
+        if (stop_worker_handler) {
+            break; //exit the loop if stop_worker_handler is set
+        }
+
+//must wait on queue pop to avoid busy waiting (will fix later)
+
+
+        //if there is a worker in the queue, pop it and start a thread
+        if ((cur = queue_pop(&worker_queue)) != NULL) {  //if there is a worker in the queue
+            pthread_mutex_lock(&worker_count_mutex);
+            worker_count++;
+            pthread_mutex_unlock(&worker_count_mutex);
+            //create a thread for the worker
+            if (pthread_create(&worker_thread_pool[worker_count - 1], NULL, worker_function, cur) != 0) {
+                printf("pthread_create failed for worker thread\n");
+                free(cur); //free the worker queue node
+                pthread_mutex_lock(&worker_count_mutex);
+                worker_count--;
+                pthread_mutex_unlock(&worker_count_mutex);
+            }
+        }
+    }
+
+    return NULL;
+}
+
+
+
+
+//get list achieves the following:
+//connects to the source directory and gets the list of files
+//checks if the file already exists in the queue
+//if not, adds the file to the queue
 
 void get_list(sync_info_mem_store* entry, FILE* log_file, int console_fd) {
     if (!entry || !log_file) {
@@ -203,34 +258,6 @@ void get_list(sync_info_mem_store* entry, FILE* log_file, int console_fd) {
 }
 
 
-    //create worker thread for each file in the directory
-
-//     pthread_t worker_thread;
-//     if (pthread_create(&worker_thread, NULL, worker_function, entry) != 0) {
-//         perror("pthread_create failed");
-//         return;
-//     }
-//     //store the thread in the worker thread pool
-//     for (int i = 0; i < worker_limit; i++) {
-//         if (worker_thread_pool[i] == 0) { //find an empty slot
-//             worker_thread_pool[i] = worker_thread;
-//             break;
-//         }
-//     }
-//     entry->worker_pid = worker_thread; //store the thread ID in the entry
-//     worker_array[worker_count++] = entry->worker_pid; //store the PID in the worker array
-
-//     printf("%s Worker started for %s -> %s\n", timebuf, entry->source_dir, entry->target_dir);
-//     fflush(stdout);
-
-//     //write to log file
-    
-// //to fix for every file in dir
-//     fprintf(log_file, "%s Added file:  \n", timebuf);
-//     fflush(log_file);
-
-
-
 int main(int argc, char* argv[]) {
 
 
@@ -265,7 +292,6 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    worker_array = malloc(sizeof(int) * worker_limit); //initialize worker array
 
     if (!log_file_ || !config_file_) {
         fprintf(stderr, "Input error\n");
@@ -278,6 +304,39 @@ int main(int argc, char* argv[]) {
 
     printf("FSS Manager started with a limit of %d workers.\n", worker_limit);
 
+
+
+    //read config file and add entries to sync_list
+    parse_config_file(config_file);
+
+    //initialize thread pool
+    worker_thread_pool = malloc(sizeof(pthread_t) * worker_limit);
+
+    //do the initial sync
+    sync_info_mem_store* current = sync_list;
+
+    while (current != NULL) {
+        current->active = 1;
+        current->last_sync_time = time(NULL);
+        current->error_count = 0;
+        //prepare to start worker for each entry in sync_list and also write to log file
+        get_list(current, log_file, -1); //-1 means no console_fd, as we are not connected to the console yet
+        current = current->next;
+    }
+
+
+
+    //start worker handler thread (a single thread to handle all workers)
+    pthread_t worker_handler_thread;
+    if (pthread_create(&worker_handler_thread, NULL, worker_handler, worker_queue) != 0) {
+        printf("pthread_create failed for worker handler thread\n");
+        fclose(log_file);
+        fclose(config_file);
+        exit(1);
+    }
+
+
+    //connect to the console
     //socket creation on port number
 
     int server_fd;
@@ -333,32 +392,13 @@ int main(int argc, char* argv[]) {
     close(server_fd); //close the server socket as we don't need it anymore
 
 
-    //read config file and add entries to sync_list
-    parse_config_file(config_file);
-
-    //initialize thread pool
-    worker_thread_pool = malloc(sizeof(pthread_t) * worker_limit);
-
-    //do the initial sync
-    sync_info_mem_store* current = sync_list;
-
-    while (current != NULL) {
-        current->active = 1;
-        current->last_sync_time = time(NULL);
-        current->error_count = 0;
-        //prepare to start worker for each entry in sync_list and also write to log file
-        get_list(current, log_file, -1); //-1 means no console_fd, as we are not connected to the console yet
-        current = current->next;
-    }
-
-
     char input[MAX_LINE];
     char response[MAX_LINE];
 
 
-    while (1) {              //get console input and handle it
+    while (1) {              //get console input and handle it when it arrives, or start a worker if there is a file in the queue
 
-        fflush(stdout);
+
         ssize_t n = read(console_fd, input, sizeof(input)-1);
         if (n <= 0) {
             if (n < 0) perror("read failed");
@@ -505,16 +545,26 @@ int main(int argc, char* argv[]) {
     }
 
 
-    //wait for all child processes to finish
+//maybe have this in worker_handler thread
+
+    //wait for all threads to finish using thread pool
     for (int i = 0; i < worker_count; i++) {
-        waitpid(worker_array[i], NULL, 0);
+        if (pthread_join(worker_thread_pool[i], NULL) != 0) {   
+            printf("pthread_join failed\n");
+        }
     }
+    free(worker_thread_pool); //free the thread pool
+/////////
+
+
+    //finish worker handler thread force it to exit
+    stop_worker_handler = 1;    //set the flag to stop the worker handler thread
+    pthread_join(worker_handler_thread, NULL); //wait for the worker handler thread to finish
 
 
     while (sync_list != NULL) {
         delete_sync_entry(&sync_list, sync_list->source_dir);
     }
-    free(worker_array); //free the worker array
 
     time_t now = time(NULL);
     struct tm *t = localtime(&now);
