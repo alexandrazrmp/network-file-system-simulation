@@ -182,20 +182,27 @@ void* worker_function(void* arg) {
         fflush(sockf); //flush to ensure the command is sent
 
         char buffer[MAX_CHUNK_SIZE]; //buffer to read data from source
-        ssize_t bytes_read = 0; //number of bytes read from source
 
-        bytes_read = read(sockfd, buffer, sizeof(buffer)); //read the response from source
+        chunk_size = read(sockfd, buffer, sizeof(buffer)); //read the response from source
 
-        printf("Worker for %s : %s received %zd bytes from source.\n", entry->source_dir, entry->filename, bytes_read);
+        printf("Worker for %s : %s received %zd bytes from source.\n", entry->source_dir, entry->filename, chunk_size);
         fflush(stdout); //flush to ensure the message is printed immediately
-        printf("Data received: %.*s\n", (int)bytes_read, buffer); //print the data received
+        printf("Data received: %.*s\n", (int)chunk_size, buffer); //print the data received
         fflush(stdout);
 
 
         //PUSH
 
         //send the command to the TARGET client
-
+        write(target_sockfd, "PUSH /", 6);
+        write(target_sockfd, entry->target_dir, strlen(entry->target_dir));
+        write(target_sockfd, "/", 1);
+        write(target_sockfd, entry->filename, strlen(entry->filename));
+        write(target_sockfd, " ", 1);
+        write(target_sockfd, (char *)chunk_size, sizeof(char*));
+        write(target_sockfd, " ", 1);
+        write(target_sockfd, buffer, sizeof(buffer));
+        write(target_sockfd, "\0", 1);
 
 sleep(5);
 
