@@ -81,11 +81,28 @@ void parse_config_file(FILE* file) {
 //worker_function synchronizes source and target files 
 //worker function to be run in a separate thread
 void* worker_function(void* arg) {
+    WorkerQueue* worker = (WorkerQueue*)arg; //cast arg to WorkerQueue pointer
 
     //example
-    printf("Worker for %s : %s started.\n", ((WorkerQueue*)arg)->source_dir, ((WorkerQueue*)arg)->filename);
+    printf("Worker for %s : %s started.\n", worker->source_dir, worker->filename);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     sleep(5); //simulate work being done
-    printf("Worker for %s : %s finished.\n", ((WorkerQueue*)arg)->source_dir, ((WorkerQueue*)arg)->filename);
+    printf("Worker for %s : %s finished.\n", worker->source_dir, worker->filename);
 
     //signal that this worker is done
 
@@ -203,10 +220,6 @@ void get_list(sync_info_mem_store* entry, FILE* log_file, int console_fd) {
     fflush(sockf);
 
 
-    char full_source_dir[PATH_MAX] = {0}, full_target_dir[PATH_MAX] = {0};
-    snprintf(full_source_dir, sizeof(full_source_dir)+1024, "/%s@%s:%d", entry->source_dir, entry->source_host, entry->source_port);
-    snprintf(full_target_dir, sizeof(full_target_dir)+1024, "/%s@%s:%d", entry->target_dir, entry->target_host, entry->target_port);
-
     //get response line by line until "."
     char line[MAX_LINE];
 
@@ -219,7 +232,7 @@ void get_list(sync_info_mem_store* entry, FILE* log_file, int console_fd) {
         }
 
         //check if the file already exists in the queue
-        if (exists_in_queue(worker_queue, full_source_dir, full_target_dir, (const char*)line)) {   //line is the filename
+        if (exists_in_queue(worker_queue, entry->source_dir, entry->target_dir, (const char*)line)) {   //line is the filename
             printf("%s Already in queue: %s\n", timebuf, line);
             fflush(stdout);
             //write to console
@@ -232,7 +245,8 @@ void get_list(sync_info_mem_store* entry, FILE* log_file, int console_fd) {
         }
 
         //push the filename to queue
-        worker_queue = queue_push(worker_queue, full_source_dir, full_target_dir, (const char*)line); //push to the queue
+        worker_queue = queue_push(worker_queue, entry->source_dir, entry->source_host, entry->source_port,
+            entry->target_dir, entry->target_host, entry->target_port, (const char*)line); //push to the queue
 
         char full_source_file[PATH_MAX] = {0}, full_target_file[PATH_MAX] = {0};
         snprintf(full_source_file, sizeof(full_source_file)*3, "/%s/%s@%s:%d", entry->source_dir, (char*)line, entry->source_host, entry->source_port);
@@ -396,7 +410,7 @@ int main(int argc, char* argv[]) {
     char response[MAX_LINE];
 
 
-    while (1) {              //get console input and handle it when it arrives, or start a worker if there is a file in the queue
+    while (1) {              //get console input and handle it when it arrives
 
 
         ssize_t n = read(console_fd, input, sizeof(input)-1);

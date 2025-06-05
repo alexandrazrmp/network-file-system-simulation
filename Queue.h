@@ -19,14 +19,23 @@
 //one entry for each sync operation of a single file of a directory
 
 typedef struct WorkerQueue {
-    char source_dir[PATH_MAX];  //full source (with port and host)
-    char target_dir[PATH_MAX];  //full target (with port and host)
+    char source_dir[PATH_MAX];  //source directory
+    char source_host[64];  //source host
+    int source_port;       //source port
+
+    char target_dir[PATH_MAX];  //target directory
+    char target_host[64];  //target host
+    int target_port;       //target port
+
     char filename[NAME_MAX];
 
     struct WorkerQueue* next;
 } WorkerQueue;
 
 
-WorkerQueue* queue_push(WorkerQueue *worker_queue, const char* src, const char* tgt, const char* filename) ;
+WorkerQueue* queue_push(WorkerQueue *worker_queue, const char* src, const char* source_host, int source_port, const char* tgt, 
+                        const char* target_host, int target_port, const char* filename) ;
+
 WorkerQueue* queue_pop(WorkerQueue **worker_queue) ;
+
 int exists_in_queue(WorkerQueue *worker_queue, const char* src, const char* tgt, const char* filename) ;
