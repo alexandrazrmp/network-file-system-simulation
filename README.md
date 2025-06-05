@@ -64,17 +64,6 @@ Not fully implemented due to lack of information due to my manager logfile being
 Purge and list all are implemented with comments explaining each instruction.
 
 
-
-
-
-
-
-
-
-
 Other points:
-I have noticed that in order to get the message [2025-06-04 18:09:00] Already in queue: a22222.txt you have to try to insert it twice 
-
-
 I have noticed that nfs_manager must start with enough workers to parse the config file plus one. From then on it has no problem with the limit.
 The queue, i believe, is correct so I have not been able to find what is wrong.

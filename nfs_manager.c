@@ -18,7 +18,8 @@ void sigchld_handler ( int sig ) {
     while ( waitpid ( -1 , NULL , WNOHANG ) > 0) ;
 }
 
-void parse_config_file(FILE* file, FILE* log_file) {
+//parses config file and adds entries to sync_list
+void parse_config_file(FILE* file) {
     if (!file) {
         perror("fopen config_file");
         exit(1);
@@ -54,7 +55,7 @@ void parse_config_file(FILE* file, FILE* log_file) {
             sync_list = add_sync_entry(&sync_list, source_dir, target_dir, source_host, source_port, target_host, target_port);   //add at the end
             sync_info_mem_store* current = exists_sync_entry(sync_list, source_dir, target_dir);  //get the ptr to the new entry
             if (current == NULL) {
-                fprintf(stderr, "Entry already exists\n");
+                fprintf(stderr, "Source directory already linked to a Target direectory for synchronization\n");
                 continue; //ignore
             }
 
@@ -91,7 +92,7 @@ void* worker_function(void* arg) {
 //achieves connections to the source and target directories
 //calls worker_function to run the worker thread
 
-void start_worker(sync_info_mem_store* entry, FILE* log_file, int console_fd) {
+void get_list(sync_info_mem_store* entry, FILE* log_file, int console_fd) {
     if (!entry || !log_file) {
         fprintf(stderr, "Invalid entry or log file\n");
         return;
@@ -167,10 +168,12 @@ void start_worker(sync_info_mem_store* entry, FILE* log_file, int console_fd) {
             printf("%s Already in queue: %s\n", timebuf, line);
             fflush(stdout);
             //write to console
-            char write_buf[1024];
-            int len = snprintf(write_buf, sizeof(write_buf), "%s Already in queue: %s\n", timebuf, line);
-            write(console_fd, write_buf, len); // len is string length
-            continue; //skip if it already exists in the queue
+            if (console_fd >= 0) { //if console_fd is valid
+                char write_buf[1024];
+                int len = snprintf(write_buf, sizeof(write_buf), "%s Already in queue: %s\n", timebuf, line);
+                write(console_fd, write_buf, len); // len is string length
+                continue; //skip if it already exists in the queue
+            }
         }
 
         //push the filename to queue
@@ -183,9 +186,11 @@ void start_worker(sync_info_mem_store* entry, FILE* log_file, int console_fd) {
         printf("%s Added file: %s -> %s\n", timebuf, full_source_file, full_target_file);
         fflush(stdout);
         //write to the socket to the console
-        char write_buf[1024];
-        int len = snprintf(write_buf, sizeof(write_buf), "%s Added file: %s -> %s\n", timebuf, full_source_file, full_target_file);
-        write(console_fd, write_buf, len); // len is string length
+        if (console_fd >= 0) { //if console_fd is valid
+            char write_buf[1024];
+            int len = snprintf(write_buf, sizeof(write_buf), "%s Added file: %s -> %s\n", timebuf, full_source_file, full_target_file);
+            write(console_fd, write_buf, len); // len is string length
+        }
         //also write to log file
         fprintf(log_file, "%s Added file: %s -> %s\n", timebuf, full_source_file, full_target_file);
         fflush(log_file); // flush to ensure it's written immediately
@@ -194,7 +199,8 @@ void start_worker(sync_info_mem_store* entry, FILE* log_file, int console_fd) {
 
     fclose(sockf);  //also closes sockfd
 
-
+    return;
+}
 
 
     //create worker thread for each file in the directory
@@ -223,8 +229,6 @@ void start_worker(sync_info_mem_store* entry, FILE* log_file, int console_fd) {
 //     fprintf(log_file, "%s Added file:  \n", timebuf);
 //     fflush(log_file);
 
-    return;
-}
 
 
 int main(int argc, char* argv[]) {
@@ -317,15 +321,6 @@ int main(int argc, char* argv[]) {
     printf("Socket created and listening on port %d\n", port);
     fflush(stdout);
 
-    //read config file and add entries to sync_list
-    parse_config_file(config_file, log_file);
-
-    //initialize thread pool
-    worker_thread_pool = malloc(sizeof(pthread_t) * worker_limit);
-
-    //do the initial sync
-    sync_info_mem_store* current = sync_list;
-
 
     //accept nfs_console connection
     int console_fd = accept(server_fd, NULL, NULL);
@@ -337,13 +332,22 @@ int main(int argc, char* argv[]) {
 
     close(server_fd); //close the server socket as we don't need it anymore
 
+
+    //read config file and add entries to sync_list
+    parse_config_file(config_file);
+
+    //initialize thread pool
+    worker_thread_pool = malloc(sizeof(pthread_t) * worker_limit);
+
+    //do the initial sync
+    sync_info_mem_store* current = sync_list;
+
     while (current != NULL) {
         current->active = 1;
         current->last_sync_time = time(NULL);
         current->error_count = 0;
         //prepare to start worker for each entry in sync_list and also write to log file
-        start_worker(current, log_file, console_fd);
-        // active_workers++;    //just because we start a worker, it DOES NOT mean it is active
+        get_list(current, log_file, -1); //-1 means no console_fd, as we are not connected to the console yet
         current = current->next;
     }
 
@@ -472,7 +476,7 @@ int main(int argc, char* argv[]) {
             current->error_count = 0;
 
             //write to log file in worker initialization
-            start_worker(current, log_file, console_fd);
+            get_list(current, log_file, console_fd);
 
         }
     
