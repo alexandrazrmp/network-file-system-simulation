@@ -351,9 +351,6 @@ int main(int argc, char* argv[]) {
     char input[MAX_LINE];
     char response[MAX_LINE];
 
-    //initialize the worker queue
-    worker_queue = queue_create(); //create an empty queue
-    //it will be used to store the workers that are waiting for a slot to be available to sync a file of a directory
 
     while (1) {              //get console input and handle it
 

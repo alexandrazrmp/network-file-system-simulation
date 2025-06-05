@@ -1,10 +1,5 @@
 #include "Queue.h"
 
-WorkerQueue* queue_create() {
-    WorkerQueue* queue = malloc(sizeof(WorkerQueue));
-    queue->next = NULL;
-    return queue;
-}
 
 //push to the front of the queue
 WorkerQueue* queue_push(WorkerQueue *worker_queue, const char* src, const char* tgt, const char* filename) {
@@ -37,11 +32,13 @@ WorkerQueue* queue_pop(WorkerQueue **worker_queue) {
 
 int exists_in_queue(WorkerQueue *worker_queue, const char* src, const char* tgt, const char* filename) {
     WorkerQueue *cur = worker_queue;
-    while (cur != NULL) {
 
-        //debugging message
-        printf("Checking: %s %s %s\n", cur->source_dir, cur->target_dir, cur->filename);
-        printf("Against: %s %s %s\n", src, tgt, filename);
+int debug = 0;    
+    while (cur != NULL) {
+printf("     %d    \n",debug++);
+//debugging message
+printf("Checking: %s %s %s\n", cur->source_dir, cur->target_dir, cur->filename);
+printf("Against: %s %s %s\n", src, tgt, filename);
 
         if (strcmp(cur->source_dir, src) == 0 &&
             strcmp(cur->target_dir, tgt) == 0 &&
