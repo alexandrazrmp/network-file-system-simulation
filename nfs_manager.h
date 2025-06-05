@@ -29,6 +29,7 @@
 
 #define MAX_LINE 1024
 
+#define MAX_CHUNK_SIZE 1024 * 1024 //1 MB
 
 void sigchld_handler(int sig) ;
 

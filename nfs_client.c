@@ -48,6 +48,43 @@ void list(const char *src_dir, FILE *client_fp) {
 }
 
 
+//function to pull a file from the source directory
+void pull(const char *file_path, int client_fd) {
+    //get the full path of the file
+    //it is located locally in the same directory as the client
+
+    int fd = open(file_path, O_RDONLY);
+    if (fd < 0) {
+        const char *error_msg = "-1\n";
+        write(client_fd, error_msg, strlen(error_msg));
+        return;
+    }
+
+    char buffer[MAX_LINE];
+    ssize_t bytes_read;
+    while ((bytes_read = read(fd, buffer, sizeof(buffer))) > 0) {
+        if (write(client_fd, buffer, bytes_read) < 0) {
+            perror("write failed");
+            close(fd);
+            return;
+        }
+    }
+
+    if (bytes_read < 0) {
+        perror("read failed");
+    }
+
+    close(fd);
+    const char *success_msg = "0\n";
+    write(client_fd, success_msg, strlen(success_msg));
+}
+
+
+
+void push(const char *file_path, long chunk_size, FILE *client_fp, int client_fd) {
+    return; //not implemented yet
+}
+
 
 
 int main(int argc, char *argv[]) {
@@ -150,17 +187,17 @@ int main(int argc, char *argv[]) {
                 list(src_dir, client_fp);
 
             } else if (strcmp(cmd, "PULL") == 0) {
-printf("CLIENT:GOT PULL\n");                
+            
                 char *file_path = strtok(NULL, " ");
                 if (!file_path) {
                     fprintf(client_fp, "-1");
                     fflush(client_fp);
                     continue;
                 }
-                // pull(file_path, client_fp, client_fd);
+                pull(file_path, client_fd);
 
             } else if (strcmp(cmd, "PUSH") == 0) {
-printf("CLIENT:GOT PUSH\n");
+
                 char *file_path = strtok(NULL, " ");
                 char *chunk_str = strtok(NULL, " ");
                 if (!file_path || !chunk_str) {
@@ -169,13 +206,13 @@ printf("CLIENT:GOT PUSH\n");
                     continue;
                 }
                 errno = 0;
-                // long chunk_size = strtol(chunk_str, NULL, 10);
+                long chunk_size = strtol(chunk_str, NULL, 10);
                 if (errno != 0) {
                     fprintf(client_fp, "-1");
                     fflush(client_fp);
                     continue;
                 }
-                // push(file_path, chunk_size, client_fp, client_fd);
+                push(file_path, chunk_size, client_fp, client_fd);
 
             } else {
                 fprintf(client_fp, "Invalid command\n");

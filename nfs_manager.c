@@ -81,30 +81,138 @@ void parse_config_file(FILE* file) {
 //worker_function synchronizes source and target files 
 //worker function to be run in a separate thread
 void* worker_function(void* arg) {
-    WorkerQueue* worker = (WorkerQueue*)arg; //cast arg to WorkerQueue pointer
+    WorkerQueue* entry = (WorkerQueue*)arg; //cast arg to WorkerQueue pointer
 
-    //example
-    printf("Worker for %s : %s started.\n", worker->source_dir, worker->filename);
+    printf("Worker for %s : %s started.\n", entry->source_dir, entry->filename);
+
+    //SOURCE DIRECTORY
+    int host_port = entry->source_port;
+    char *host_ip_ = entry->source_host;
+
+    if (host_port <= 0 || host_port > 65535) {
+        fprintf(stderr, "invalid port number: %d\n", host_port);
+        return NULL;
+    }
+
+    //create and connect socket
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) {
+        perror("socket creation failed");
+        return NULL;
+    }
+
+    struct sockaddr_in serv_addr = {0};
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(host_port);
+    if (inet_pton(AF_INET, host_ip_, &serv_addr.sin_addr) <= 0) {
+        fprintf(stderr, "invalid host IP: %s\n", host_ip_);
+        close(sockfd);
+        return NULL;
+    }
+
+    if (connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
+        perror("connection failed");
+        close(sockfd);
+        return NULL;
+    }
+
+
+    FILE *sockf = fdopen(sockfd, "r+"); //read-write
+    if (!sockf) {
+        perror("fdopen failed");
+        close(sockfd);
+        return NULL;
+    }
 
 
 
+    //TARGET DIRECTORY
+
+    int target_port = entry->target_port;
+    char *target_host_ = entry->target_host;
+    if (target_port <= 0 || target_port > 65535) {
+        fprintf(stderr, "invalid port number: %d\n", target_port);
+        fclose(sockf); //close the socket
+        return NULL;
+    }
+    //create and connect socket to target
+    int target_sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (target_sockfd < 0) {
+        perror("socket creation failed for target");
+        fclose(sockf); //close the source socket
+        return NULL;
+    }
+    struct sockaddr_in target_serv_addr = {0};
+    target_serv_addr.sin_family = AF_INET;
+    target_serv_addr.sin_port = htons(target_port);
+    if (inet_pton(AF_INET, target_host_, &target_serv_addr.sin_addr) <= 0) {
+        fprintf(stderr, "invalid target host IP: %s\n", target_host_);
+        close(target_sockfd);
+        fclose(sockf); //close the source socket
+        return NULL;
+    }
+
+    if (connect(target_sockfd, (struct sockaddr*)&target_serv_addr, sizeof(target_serv_addr)) < 0) {
+        perror("connection failed for target");
+        close(target_sockfd);
+        fclose(sockf); //close the source socket
+        return NULL;
+    }
+
+    FILE *target_sockf = fdopen(target_sockfd, "r+"); //read-write
+    if (!target_sockf) {
+        perror("fdopen failed for target");
+        close(target_sockfd);
+        fclose(sockf); //close the source socket
+        return NULL;
+    }
+
+    // ssize_t chunk_size = 0; //size of the chunk to be received from source and then pushed to the target
+
+    // //PULL
+
+    // //send command to the SOURCE client
+    // write(sockfd, "PULL /", 6);
+    // write(sockfd, entry->source_dir, strlen(entry->source_dir));
+    // write(sockfd, "/", 1);
+    // write(sockfd, entry->filename, strlen(entry->filename));
+    // write(sockfd, "\n", 1);
+    // fflush(sockf); //flush to ensure the command is sent
+
+    // char buffer[MAX_CHUNK_SIZE]; //buffer to read data from source
+
+
+    // //read data from source chunk size
+    // chunk_size = read(sockfd, buffer, sizeof(buffer)); //read data from source
+
+    // if (chunk_size < 0) {
+    //     perror("read failed from source");
+    // }
+
+    // //print buffer to debug
+    // buffer[chunk_size] = '\0'; //null terminate the buffer
+    // printf("Worker for %s : %s received %zd bytes from source.\n", entry->source_dir, entry->filename, chunk_size);
+    // printf("Data: %s\n", buffer); //print the data received from source
+
+
+    //PUSH
 
 
 
+sleep(5);
 
 
+    printf("Worker for %s : %s finished.\n", entry->source_dir, entry->filename);
+    fflush(stdout); //flush to ensure the message is printed immediately
 
 
-
-
-
-
-
-
-    sleep(5); //simulate work being done
-    printf("Worker for %s : %s finished.\n", worker->source_dir, worker->filename);
+    close(target_sockfd); //close the target socket
+    fclose(target_sockf); //close the target socket file pointer
+    close(sockfd); //close the source socket
+    fclose(sockf); //close the source socket file pointer
 
     //signal that this worker is done
+ 
 
     pthread_mutex_lock(&worker_count_mutex);
     worker_count--; //decrease worker count
@@ -134,8 +242,7 @@ void* worker_handler(void* arg) {
             break; //exit the loop if stop_worker_handler is set
         }
 
-//must wait on queue pop to avoid busy waiting (will fix later)
-
+                                                                    //must wait on queue pop to avoid busy waiting (will fix later)
 
         //if there is a worker in the queue, pop it and start a thread
         if ((cur = queue_pop(&worker_queue)) != NULL) {  //if there is a worker in the queue
@@ -155,7 +262,6 @@ void* worker_handler(void* arg) {
 
     return NULL;
 }
-
 
 
 
