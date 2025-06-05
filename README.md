@@ -1,43 +1,32 @@
-FIX ALL FULL (OPERATION FILENAME IF NOT NEEDED)
-
-
 Compilation Instructions:
 
 compile all using make
 
 run manager using 
-./nfs_manager -l <manager_logfile> -c <config_file> -n <worker_limit>
-(worker limit is optional)
+./nfs_manager -l <manager_logfile> -c <config_file> -n <worker_limit> -p <port_number> -b <bufferSize>
+(worker limit is optional since there is a default)
 
 run console using
-./nfs_console -l <console-logfile>
+./nfs_console -l <console-logfile> -h <host_IP> -p <host_port>
 
-if you wish to run worker use 
-./worker src_dir tgt_dir ALL FULL
-(./worker /home/users/sdi2200048/ergasies/SysPro/hw1-alexandrazrmp/source_dir /home/users/sdi2200048/ergasies/SysPro/hw1-alexandrazrmp/target_dir ALL FULL)
-(used for testing)
-
-run bash script using (no need for compialation)
-./nfs_script.sh -p <path> -c <command>
-(not fully implemented)
+run client using
+./nfs_client -p <port_number>
 
 Technical Report:
 
-Implemented a File Synchronization System using 3 components(executables): nfs_manager, nfs_console and worker.
+Implemented a Network File Synchronization System using 3 components(executables): nfs_manager, nfs_console and nfs_client.
 
 nfs_manager: 
 Takes input given by user as arguements in main function and initializes worker limit, its logfile and the configuration file which has pairs of 
-directories (source and target) that are meant to be synchronized at all times. 
-It then creates two named pipes (nfs_in and nfs_out) for communtication with the console executable and parses the configuration file to create 
-initial logs to sync_info_mem_store list which is used to keep sync-pair information.
-Inotify is initialized and add_directory_watch() is used to associate a watch descriptor to sync_info_mem_store entries (directory pairs,
-but actually just the source dir of the pair) so that nfs_manager is notified for any changes: deletion, modification or addition.
-List sync_info_mem_store and Queue WorkerQueue are initialized globally inside nfs_manager and are implemented in List.c and Queue.c.
-WorkerQueue is used to store pending worker processes that cannot start because worker limit is reached.
-Select is used inside an endless loop to determine whether a signal has occured or input is given through nfs_in by the console
-Missing requested corrrect logfile format (exec report from worker is being printed to show that it is implemented but not written to the logfile
-due to wrong handling of where (in which function) I print to the logfile)
-(could change it, but I must start another project, thank you for your understanding)
+directories (source and target) that are meant to get synchronized. 
+It then calls function get_list for all entries which connects to the source directory's port and gets all file names in the directory and stores
+them in a queue. This queue is used for hadling a worker limit amount of worker processes that sync a single source file to a single target file
+and maintaining order in the process...
+Then a worker handler thread starts that will handle such processes.
+The manager then tries to connect to the console and enters a non ending loop that will get instructions from the console.
+Instructions can be addition of a source and target directory, 
+
+//////////////////////////////////////////////////////////////////////////////
 
 nfs_console:
 The console executable has a quite simple implementation. It takes a logfile as std input through main function arguements where it stores all
@@ -50,7 +39,7 @@ It parses the instruction, making sure it is in valid form and writes to its log
 nfs_in named pipe.
 
 
-worker:
+nfs_client:
 An executrable that is being executed through fork() in nfs_manager as its child process.
 Its arguements deter the sync operation it must do:
 if there is a specific filename where the operation must be done then there is two options:
@@ -59,11 +48,7 @@ if there is a specific filename where the operation must be done then there is t
 or else if there is no specific filename then that arguement should be "ALL" and the two operaions above (1) and (2) are done to all files
 from the source directory
 
-nfs_script:
-Not fully implemented due to lack of information due to my manager logfile being incomplete.
-Purge and list all are implemented with comments explaining each instruction.
+
 
 
 Other points:
-I have noticed that nfs_manager must start with enough workers to parse the config file plus one. From then on it has no problem with the limit.
-The queue, i believe, is correct so I have not been able to find what is wrong.

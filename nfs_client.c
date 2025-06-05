@@ -50,6 +50,8 @@ void list(const char *src_dir, FILE *client_fp) {
 }
 
 
+//TO FIX PULL TO NOT KNOW CHUNK SIZE
+
 //function to pull a file from the source directory
 void pull(const char *file, int client_fd) {
     //file is in the form of /source_dir/file
@@ -71,9 +73,6 @@ void pull(const char *file, int client_fd) {
     //construct the full path to the file
     char file_path[PATH_MAX];
     snprintf(file_path, sizeof(file_path), "%s%s", dir_path, file);
-
-    printf("CLIENT: Pulling file: %s\n", file_path);
-
     
     //open the file for reading
     FILE *fp = fopen(file_path, "rb");
@@ -106,8 +105,41 @@ void pull(const char *file, int client_fd) {
 
 
 
-void push(const char *file_path, long chunk_size, FILE *client_fp, int client_fd) {
-    return; //not implemented yet
+void push(const char *file, long chunk_size, int client_fd, char* data) {
+    //open target directory
+    //get the real path of the file same as this program
+
+    char exe_path[PATH_MAX];
+    ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
+    if (len == -1) {
+        perror("readlink failed");
+        return;
+    }
+    exe_path[len] = '\0';  // Null-terminate the string
+
+    //get the directory where the program is located
+    char *dir_path = dirname(exe_path);
+
+    //construct the full path to the file
+    char file_path[PATH_MAX];
+    snprintf(file_path, sizeof(file_path), "%s%s", dir_path, file);
+
+    //open file for writing and copy input from client_fd buffer of size chunk_size to the file
+
+    FILE *fp = fopen(file_path, "ab"); //open for append (write at end)
+    if (!fp) {
+        perror("fopen failed");
+        return;
+    }
+
+
+
+
+
+
+    fclose(fp);
+
+    return;
 }
 
 
@@ -188,7 +220,7 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
-        char line[MAX_LINE];
+        char line[MAX_LINE + 1024*1024];
         while (fgets(line, sizeof(line), client_fp)) {
 
             line[strcspn(line, "\n")] = 0; //remove newline if present
@@ -225,6 +257,7 @@ int main(int argc, char *argv[]) {
 
                 char *file_path = strtok(NULL, " ");
                 char *chunk_str = strtok(NULL, " ");
+
                 if (!file_path || !chunk_str) {
                     fprintf(client_fp, "-1");
                     fflush(client_fp);
@@ -237,7 +270,11 @@ int main(int argc, char *argv[]) {
                     fflush(client_fp);
                     continue;
                 }
-                push(file_path, chunk_size, client_fp, client_fd);
+
+                char* data = NULL;
+
+
+                push(file_path, chunk_size, client_fd , data);
 
             } else {
                 fprintf(client_fp, "Invalid command\n");
