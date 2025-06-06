@@ -271,9 +271,18 @@ int main(int argc, char *argv[]) {
                     continue;
                 }
 
-                char* data = NULL;
+                char *data = malloc(chunk_size);
+                
+                size_t total_read = 0;
+                while (total_read < chunk_size) {
+                    ssize_t r = read(client_fd, data + total_read, chunk_size - total_read);
+                    if (r <= 0) break; // handle error or disconnect
+                    total_read += r;
+                }
 
                 push(file_path, chunk_size, client_fd , data);
+
+                free(data);
 
             } else {
                 fprintf(client_fp, "Invalid command\n");
