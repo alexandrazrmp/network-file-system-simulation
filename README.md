@@ -22,33 +22,38 @@ directories (source and target) that are meant to get synchronized.
 It then calls function get_list for all entries which connects to the source directory's port and gets all file names in the directory and stores
 them in a queue. This queue is used for hadling a worker limit amount of worker processes that sync a single source file to a single target file
 and maintaining order in the process...
-Then a worker handler thread starts that will handle such processes.
-The manager then tries to connect to the console and enters a non ending loop that will get instructions from the console.
-Instructions can be addition of a source and target directory, 
+Then a single worker handler thread starts that will handle such processes.
+Using mutexes for handling when worker limit is not reached and only busy-waiting when queue is empty (could fix that, no time) it starts
+new worker threads with FIFO order.
+The manager then tries to connect to the console and enters a while(1) loop that will get instructions from the console.
+Instructions can be addition of many source and target directory processes in queue, cancellation of many source->target directory processes in 
+queue, or shutdown, where the loop breaks.
 
 //////////////////////////////////////////////////////////////////////////////
 
 nfs_console:
-The console executable has a quite simple implementation. It takes a logfile as std input through main function arguements where it stores all
-instructions it gets.
+The console executable has a quite simple implementation. 
+It first connects to the manager on the port that is given to it as an arguement.
+It takes a logfile as std input through main function arguements where it stores all instructions it gets.
 Instructions are given to the console in the form :
-add <source> <target>, status <directory>, cancel <source>, sync <directory>, shutdown
+add <source> <target>, cancel <source>, shutdown
 inside a while(1) loop that only breaks when shutdown instruction is given or some unexpected error occures
 (invalid input is simply ignored)
 It parses the instruction, making sure it is in valid form and writes to its logfile accordingly, before sending it to the manager through the
-nfs_in named pipe.
+socket where they are connected.
 
 
 nfs_client:
-An executrable that is being executed through fork() in nfs_manager as its child process.
-Its arguements deter the sync operation it must do:
-if there is a specific filename where the operation must be done then there is two options:
-    (1)delete the file through delete_file()
-    (2)write or overwrite the file if it is new or if it is just modified (same operation) 
-or else if there is no specific filename then that arguement should be "ALL" and the two operaions above (1) and (2) are done to all files
-from the source directory
-
-
+An executrable that runs in the background, always. Many clients can run at once.
+Clients are listening for connections so they are behaving more like servers.
+They can accept 3 instructions:
+List (sent by manager):
+where they simply send the manager the file names of a flat directory that is local to them (the specific dir they were asked to)
+Pull (sent by a worker thread of nfs_manager) : 
+where they are sending through the socket 
 
 
 Other points:
+cancel operation does not do anything
+push is half-implemented (it only opens target file but fails to get data from worker), however pull works correctly!! (and the worker gets the 
+data correctly!)

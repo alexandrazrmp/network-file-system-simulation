@@ -83,8 +83,6 @@ void parse_config_file(FILE* file) {
 void* worker_function(void* arg) {
     WorkerQueue* entry = (WorkerQueue*)arg; //cast arg to WorkerQueue pointer
 
-    printf("Worker for %s : %s started.\n", entry->source_dir, entry->filename);
-
     //SOURCE DIRECTORY
     int host_port = entry->source_port;
     char *host_ip_ = entry->source_host;
@@ -165,11 +163,6 @@ void* worker_function(void* arg) {
 
         chunk_size = read(sockfd, buffer, sizeof(buffer)); //read the response from source
 
-        printf("Worker for %s : %s received %zd bytes from source.\n", entry->source_dir, entry->filename, chunk_size);
-        fflush(stdout); //flush to ensure the message is printed immediately
-        printf("Data received: %.*s\n", (int)chunk_size, buffer); //print the data received
-        fflush(stdout);
-
 
         //PUSH
 
@@ -186,12 +179,6 @@ void* worker_function(void* arg) {
 
         // write(target_sockfd, buffer, sizeof(buffer));
         write(target_sockfd, buffer, chunk_size);
-
-
-sleep(1);
-
-    printf("Worker for %s : %s finished.\n", entry->source_dir, entry->filename);
-    fflush(stdout); //flush to ensure the message is printed immediately
 
 
     close(target_sockfd); //close the target socket
