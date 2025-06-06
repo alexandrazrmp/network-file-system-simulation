@@ -272,7 +272,6 @@ int main(int argc, char *argv[]) {
                 }
 
                 char* data = NULL;
-printf("chunkkkkkkkkkkkk            %ld\n", chunk_size);
 
                 push(file_path, chunk_size, client_fd , data);
 

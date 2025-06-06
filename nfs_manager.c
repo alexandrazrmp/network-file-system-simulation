@@ -179,10 +179,14 @@ void* worker_function(void* arg) {
         write(target_sockfd, "/", 1);
         write(target_sockfd, entry->filename, strlen(entry->filename));
         write(target_sockfd, " ", 1);
-        write(target_sockfd, (char *)chunk_size, sizeof(char*));
+        char chunk_str[32];
+        snprintf(chunk_str, sizeof(chunk_str), "%ld", chunk_size);
+        write(target_sockfd, chunk_str, strlen(chunk_str));
         write(target_sockfd, " ", 1);
-        write(target_sockfd, buffer, sizeof(buffer));
-        write(target_sockfd, "\0", 1);
+
+        // write(target_sockfd, buffer, sizeof(buffer));
+        write(target_sockfd, buffer, chunk_size);
+
 
 sleep(1);
 
