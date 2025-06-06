@@ -204,7 +204,7 @@ void* worker_function(void* arg) {
         write(target_sockfd, buffer, sizeof(buffer));
         write(target_sockfd, "\0", 1);
 
-sleep(5);
+sleep(1);
 
     printf("Worker for %s : %s finished.\n", entry->source_dir, entry->filename);
     fflush(stdout); //flush to ensure the message is printed immediately
@@ -253,9 +253,10 @@ void* worker_handler(void* arg) {
             pthread_mutex_lock(&worker_count_mutex);
             int index = worker_count;
             worker_count++;
+            int ret = pthread_create(&worker_thread_pool[index], NULL, worker_function, cur);
             pthread_mutex_unlock(&worker_count_mutex);
             //create a thread for the worker
-            if (pthread_create(&worker_thread_pool[index], NULL, worker_function, cur) != 0) {
+            if (ret != 0) {
                 printf("pthread_create failed for worker thread\n");
                 free(cur); //free the worker queue node
                 pthread_mutex_lock(&worker_count_mutex);
@@ -407,7 +408,7 @@ int main(int argc, char* argv[]) {
                         }
                         break;
             default:
-                fprintf(stderr, "Please give input in the form ./fss_manager -l <logfile> -c <config_file> -n <worker_limit> -p <port_number> -b <bufferSize>\n");
+                fprintf(stderr, "Please give input in the form ./nfs_manager -l <logfile> -c <config_file> -n <worker_limit> -p <port_number> -b <bufferSize>\n");
                 exit(1);
         }
     }
@@ -427,7 +428,7 @@ int main(int argc, char* argv[]) {
     FILE* log_file = fopen(log_file_, "a");
     FILE* config_file = fopen(config_file_, "r");
 
-    printf("FSS Manager started with a limit of %d workers.\n", worker_limit);
+    printf("NFS Manager started with a limit of %d workers.\n", worker_limit);
 
 
 
