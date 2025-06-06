@@ -65,7 +65,7 @@ void pull(const char *file, int client_fd) {
         perror("readlink failed");
         return;
     }
-    exe_path[len] = '\0';  // Null-terminate the string
+    exe_path[len] = '\0';  //null-terminate the string
 
     //get the directory where the program is located
     char *dir_path = dirname(exe_path);
@@ -89,7 +89,7 @@ void pull(const char *file, int client_fd) {
     buffer[bytes_read] = '\0'; //null terminate the buffer
 
     //write to the manager
-    write(client_fd, buffer, sizeof(buffer));
+    write(client_fd, buffer, bytes_read);
 
 
     //read the file in chunks and send to the client
@@ -115,7 +115,7 @@ void push(const char *file, long chunk_size, int client_fd, char* data) {
         perror("readlink failed");
         return;
     }
-    exe_path[len] = '\0';  // Null-terminate the string
+    exe_path[len] = '\0';  //null-terminate the string
 
     //get the directory where the program is located
     char *dir_path = dirname(exe_path);
@@ -263,16 +263,16 @@ int main(int argc, char *argv[]) {
                     fflush(client_fp);
                     continue;
                 }
-                errno = 0;
-                long chunk_size = strtol(chunk_str, NULL, 10);
-                if (errno != 0) {
-                    fprintf(client_fp, "-1");
-                    fflush(client_fp);
+                char *endptr;
+                size_t chunk_size = strtoul(chunk_str, &endptr, 10);
+                
+                if (!chunk_size) {  //nothing to read
+                    write(client_fd, "\0", 1);
                     continue;
                 }
 
                 char* data = NULL;
-
+printf("chunkkkkkkkkkkkk            %ld\n", chunk_size);
 
                 push(file_path, chunk_size, client_fd , data);
 

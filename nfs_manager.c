@@ -117,14 +117,6 @@ void* worker_function(void* arg) {
     }
 
 
-    FILE *sockf = fdopen(sockfd, "r+"); //read-write
-    if (!sockf) {
-        perror("fdopen failed");
-        close(sockfd);
-        return NULL;
-    }
-
-
 
     //TARGET DIRECTORY
 
@@ -132,14 +124,12 @@ void* worker_function(void* arg) {
     char *target_host_ = entry->target_host;
     if (target_port <= 0 || target_port > 65535) {
         fprintf(stderr, "invalid port number: %d\n", target_port);
-        fclose(sockf); //close the socket
         return NULL;
     }
     //create and connect socket to target
     int target_sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (target_sockfd < 0) {
         perror("socket creation failed for target");
-        fclose(sockf); //close the source socket
         return NULL;
     }
     struct sockaddr_in target_serv_addr = {0};
@@ -148,24 +138,15 @@ void* worker_function(void* arg) {
     if (inet_pton(AF_INET, target_host_, &target_serv_addr.sin_addr) <= 0) {
         fprintf(stderr, "invalid target host IP: %s\n", target_host_);
         close(target_sockfd);
-        fclose(sockf); //close the source socket
         return NULL;
     }
 
     if (connect(target_sockfd, (struct sockaddr*)&target_serv_addr, sizeof(target_serv_addr)) < 0) {
         perror("connection failed for target");
         close(target_sockfd);
-        fclose(sockf); //close the source socket
         return NULL;
     }
 
-    FILE *target_sockf = fdopen(target_sockfd, "r+"); //read-write
-    if (!target_sockf) {
-        perror("fdopen failed for target");
-        close(target_sockfd);
-        fclose(sockf); //close the source socket
-        return NULL;
-    }
 
     ssize_t chunk_size = 0; //size of the chunk to be received from source and then pushed to the target
 
@@ -179,7 +160,6 @@ void* worker_function(void* arg) {
         write(sockfd, "/", 1);
         write(sockfd, entry->filename, strlen(entry->filename));
         write(sockfd, "\n", 1);
-        fflush(sockf); //flush to ensure the command is sent
 
         char buffer[MAX_CHUNK_SIZE]; //buffer to read data from source
 
@@ -211,9 +191,7 @@ sleep(1);
 
 
     close(target_sockfd); //close the target socket
-    fclose(target_sockf); //close the target socket file pointer
     close(sockfd); //close the source socket
-    fclose(sockf); //close the source socket file pointer
 
     //signal that this worker is done
  
