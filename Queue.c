@@ -48,3 +48,22 @@ int exists_in_queue(WorkerQueue *worker_queue, const char* src, const char* tgt,
     }
     return 0;
 }
+
+int queue_remove_all_source(WorkerQueue **worker_queue, const char *src) {
+    int flag = 0;
+    WorkerQueue **cur = worker_queue;
+
+    while (*cur != NULL) {
+
+        if (strcmp((*cur)->source_dir, src) == 0 ) {
+            //remove entry from queue
+            WorkerQueue* delete = *cur;
+            *cur = (*cur)->next;
+            free(delete);
+            flag = 1;
+        }else (*cur) = (*cur)->next;
+    }
+
+    return flag;
+
+}

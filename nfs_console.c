@@ -127,12 +127,15 @@ int main(int argc, char *argv[]) {
         char target_dir[PATH_MAX] = {0}, target_host[64] = {0};
         int target_port = 0;
 
-        if (arg1 != NULL) {
+        if (arg1 != NULL && strcmp(instruction, "add")==0) {
             int a = sscanf(arg1, "/%[^@]@%[^:]:%d", source_dir, source_host, &source_port) ; 
             if (a != 3) {
                 fprintf(stderr, "CONSOLE recieved invalid input format\n");
                 continue;
             }
+        }
+        else if (arg1 != NULL) {
+            sscanf(arg1, "/%[^@]", source_dir);
         }
         
         if (arg2 != NULL) {

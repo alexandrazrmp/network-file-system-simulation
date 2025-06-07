@@ -29,7 +29,6 @@ The manager then tries to connect to the console and enters a while(1) loop that
 Instructions can be addition of many source and target directory processes in queue, cancellation of many source->target directory processes in 
 queue, or shutdown, where the loop breaks.
 
-//////////////////////////////////////////////////////////////////////////////
 
 nfs_console:
 The console executable has a quite simple implementation. 
@@ -54,6 +53,4 @@ where they are sending through the socket
 
 
 Other points:
-cancel operation does not do anything
-push is half-implemented (it only opens target file but fails to get data from worker), however pull works correctly!! (and the worker gets the 
-data correctly!)
+push is half-implemented (it only opens target file but fails to get data from worker), however pull works correctly!! (and the worker gets the data correctly!)

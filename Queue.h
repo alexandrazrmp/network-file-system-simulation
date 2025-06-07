@@ -39,3 +39,5 @@ WorkerQueue* queue_push(WorkerQueue *worker_queue, const char* src, const char* 
 WorkerQueue* queue_pop(WorkerQueue **worker_queue) ;
 
 int exists_in_queue(WorkerQueue *worker_queue, const char* src, const char* tgt, const char* filename) ;
+
+int queue_remove_all_source(WorkerQueue** worker_queue, const char* src); 

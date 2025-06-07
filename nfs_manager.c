@@ -150,6 +150,8 @@ void* worker_function(void* arg) {
 
     //pull and push in a loop
 
+printf("worker for %s: %s\n", entry->source_dir, entry->filename);
+
         //PULL
 
         //send command to the SOURCE client
@@ -179,6 +181,11 @@ void* worker_function(void* arg) {
 
         // write(target_sockfd, buffer, sizeof(buffer));
         write(target_sockfd, buffer, chunk_size);
+
+
+
+sleep(10);
+printf("worker for %s: %s   ENDDDDDDDDDD\n", entry->source_dir, entry->filename);
 
 
     close(target_sockfd); //close the target socket
@@ -525,13 +532,16 @@ int main(int argc, char* argv[]) {
         char target_dir[PATH_MAX] = {0}, target_host[64] = {0};
         int target_port = 0;
 
-        if (arg1 != NULL) {
+        if (arg1 != NULL && strcmp(instruction, "add")==0) {
             int a = sscanf(arg1, "/%[^@]@%[^:]:%d", source_dir, source_host, &source_port) ; 
             //input is corerct from console, so we can assume it is valid
             if (a != 3) {   //but still, if it is not, break
                 fprintf(stderr, "invalid input format\n");
                 break;
             }
+        }
+        else if (arg1 != NULL) {
+            sscanf(arg1, "/%[^@]", source_dir);
         }
         
         if (arg2 != NULL) {
@@ -570,31 +580,31 @@ int main(int argc, char* argv[]) {
     
         } else if (strcmp(instruction, "cancel") == 0) {
 
-            //find the entry in sync_list and set active to 0
-            sync_info_mem_store* entry = exists_sync_entry(sync_list, source_dir, NULL);
-            if (entry != NULL) {
-                entry->active = 0; //set active to 0
-                entry->last_sync_time = time(NULL); //update last sync time
-                entry->error_count = 0; //reset error count
+                //remove all such processes form queue
+                int ret= queue_remove_all_source(&worker_queue, source_dir);
 
-                printf("%s Synchronization stopped for %s\n", timebuf, arg1);
-                fflush(stdout); //print immediately
-                //write to logfile and send to console
-                fprintf(log_file, "%s Synchronization stopped for %s\n", timebuf, arg1);
-                fflush(log_file); // flush to ensure it's written immediately
-                snprintf(response, sizeof(response), "%s Synchronization stopped for %s\n", timebuf, arg1);
-                if (write(console_fd, response, strlen(response)) < 0) {
-                    perror("write failed");
+                if (ret) {
+                    printf("%s Synchronization stopped for %s\n", timebuf, arg1);
+                    fflush(stdout); //print immediately
+                    //write to logfile and send to console
+                    fprintf(log_file, "%s Synchronization stopped for %s\n", timebuf, arg1);
+                    fflush(log_file); // flush to ensure it's written immediately
+                    snprintf(response, sizeof(response), "%s Synchronization stopped for %s\n", timebuf, arg1);
+                    if (write(console_fd, response, strlen(response)) < 0) {
+                        perror("write failed");
+                    }
+                }else {
+                    printf("%s !!!!!!!Directory not being synchronized: %s\n", timebuf, arg1);
+                    fflush(stdout); //print immediately
+                    //write to logfile and send to console
+
+                    snprintf(response, sizeof(response), "%s Directory not being synchronized: %s\n", timebuf, arg1);
+                    if (write(console_fd, response, strlen(response)) < 0) {
+                        perror("write failed");
+                    }
+
                 }
-            } else {
-                printf("%s Directory not being synchronized: %s.\n", timebuf, arg1);
-                fflush(stdout); //print immediately
-                //send to console
-                snprintf(response, sizeof(response), "%s Directory not being synchronized: %s.\n", timebuf, arg1);
-                if (write(console_fd, response, strlen(response)) < 0) {
-                    perror("write failed");
-                }
-            }
+
 
         } else if (strcmp(instruction, "add") == 0) {
 
