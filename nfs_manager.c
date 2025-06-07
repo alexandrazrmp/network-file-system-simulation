@@ -148,10 +148,6 @@ void* worker_function(void* arg) {
 
     ssize_t chunk_size = 0; //size of the chunk to be received from source and then pushed to the target
 
-    //pull and push in a loop
-
-printf("worker for %s: %s\n", entry->source_dir, entry->filename);
-
         //PULL
 
         //send command to the SOURCE client
@@ -181,11 +177,6 @@ printf("worker for %s: %s\n", entry->source_dir, entry->filename);
 
         // write(target_sockfd, buffer, sizeof(buffer));
         write(target_sockfd, buffer, chunk_size);
-
-
-
-sleep(10);
-printf("worker for %s: %s   ENDDDDDDDDDD\n", entry->source_dir, entry->filename);
 
 
     close(target_sockfd); //close the target socket
@@ -594,7 +585,7 @@ int main(int argc, char* argv[]) {
                         perror("write failed");
                     }
                 }else {
-                    printf("%s !!!!!!!Directory not being synchronized: %s\n", timebuf, arg1);
+                    printf("%s Directory not being synchronized: %s\n", timebuf, arg1);
                     fflush(stdout); //print immediately
                     //write to logfile and send to console
 

@@ -54,3 +54,4 @@ where they are sending through the socket
 
 Other points:
 push is half-implemented (it only opens target file but fails to get data from worker), however pull works correctly!! (and the worker gets the data correctly!)
+pull and push are not in a loop to get all data
