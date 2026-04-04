@@ -1,0 +1,34 @@
+
+
+
+
+## run a nfs_client (source) in another console  
+## on 195.134.65.86
+./nfs_client -p 5556
+
+## run another nfs_client (target) in another console  
+## on 195.134.65.87 
+./nfs_client -p 5557
+
+## run nfs_manager in aterm connected at 195.134.65.84 and 5555
+./nfs_manager -l np_nfs_manager.log -c config_nfs.cfg -n 5 -p 5555 -b 7
+
+## run nfs_console in another console 
+./nfs_console -l np_nfs_console.log -h 195.134.65.84 -p 5555
+
+##check initial sync in target client
+
+## console //
+cancel /sysprotest/config_source_dir1 
+
+## console
+add /sysprotest/added_source_dir@127.0.0.1:5556 /sysprotest/added_target_dir@195.134.65.87:5557
+ls sysprotest/added_target_dir
+
+
+## console //
+shutdown
+
+## Anoixe kai deixe ta log arxeio toy manager kai toy console
+
+
